@@ -1,0 +1,218 @@
+# coding:utf-8
+"""Pixiv components."""
+# TODO: Optimize try-except behavior
+# TODO: Store illustration info into local database
+import json
+import os
+import random
+import re
+import time
+from datetime import date
+
+import requests
+from bs4 import BeautifulSoup
+
+import globj
+
+# Define misc
+_LOGIN_URL = 'https://accounts.pixiv.net/'
+_USER_URL = 'https://www.pixiv.net/ajax/user/'
+_ILLUST_URL = 'https://www.pixiv.net/ajax/illust/'
+_ROOT_URL = 'https://www.pixiv.net/'
+
+
+def login(se, proxy: dict, uid: str, pw: str):
+    """Get post_key and retrieve cookies."""
+    try:
+        with se.get(_LOGIN_URL + 'login',
+                    proxies=proxy,
+                    timeout=5) as pk_res:
+            pk_html = BeautifulSoup(pk_res.text, 'lxml')
+        pk_node = pk_html.find('input', attrs={'name': 'post_key'})
+        if not pk_node:
+            raise globj.ResponseError('Cannot fetch post key.')
+
+        login_form = {'password': pw,
+                      'pixiv_id': uid,
+                      'post_key': pk_node['value']}
+        login_res = requests.post(_LOGIN_URL + 'api/login',
+                                  proxies=proxy,
+                                  data=login_form,
+                                  cookies=se.cookies,
+                                  timeout=5)
+        se.cookies.update(login_res.cookies)
+    except requests.Timeout:
+        raise requests.Timeout('Timeout during Logining.')
+    except globj.ResponseError:
+        raise
+
+
+def get_following(se, proxy: dict) -> dict:
+    """Get the list of following."""
+    try:
+        with se.get(_ROOT_URL + 'bookmark.php',
+                    params={'type': 'user'},
+                    proxies=proxy,
+                    cookies=se.cookies,
+                    timeout=5) as fo_res:
+            fo_html = BeautifulSoup(fo_res.text, 'lxml')
+        fo_node = fo_html.find_all('div', class_='userdata')
+        if not fo_node:
+            raise globj.ResponseError('Cannot fetch following info.')
+
+        user_info = {ele.a['data-user_id']: ele.a['data-user_name'] for ele in fo_node}
+        return user_info
+    except requests.Timeout:
+        raise requests.Timeout('Timeout during getting follow info.')
+    except globj.ResponseError:
+        raise
+
+
+def get_new(se, proxy: dict = None, num: int = 0, user_id: str = '') -> dict:
+    """
+    Get new items of following or specified user.
+    Args:
+        se: Session instance.
+        proxy: (optinal) the proxy used.
+        num: (optinal when user_id specified) the number of illustration
+            will be downloaded. If user_id specified and num omitted,
+            all illustration will be downloaded.
+        user_id: (optinal) the id of the aimed user. If not given, the new
+            illustration will be fetched from following.
+    """
+    if num // 20 + 1 > 100:
+        pn = 100
+    else:
+        pn = num // 20 + 1 if num else 0
+
+    item_info = {}
+    try:
+        if user_id:
+            with se.get(_USER_URL + user_id + '/profile/all',
+                        proxies=proxy,
+                        cookies=se.cookies,
+                        timeout=5) as user_res:
+                user_json = json.loads(user_res.text)
+            if user_json['error']:
+                raise globj.ResponseError(user_json['message'] + '(user pic)')
+
+            user_json = user_json['body']
+            if user_json['manga'] and user_json['illusts']:  # Combine illustration and comic into one dict
+                item_dic = {**user_json['illusts'], **user_json['manga']}
+            else:
+                item_dic = user_json['manga'] if user_json['manga'] else user_json['illusts']
+        else:
+            item_dic = {}
+            for p in range(pn):
+                with se.get(_ROOT_URL + 'bookmark_new_illust.php',
+                            params={'p': str(p + 1)},
+                            proxies=proxy,
+                            cookies=se.cookies,
+                            timeout=5) as new_res:
+                    new_html = BeautifulSoup(new_res.text, 'lxml')
+                new_node = new_html.find(id='js-mount-point-latest-following')
+                if not new_node:
+                    raise globj.ResponseError('Cannot fetch new following items.')
+
+                item_json = json.loads(new_node['data-items'])
+                item_dic.update({item['illustId']: None for item in item_json})
+
+        for pid in item_dic:  # Retrieving detail info of illustration
+            with se.get(_ILLUST_URL + pid,
+                        proxies=proxy,
+                        cookies=se.cookies,
+                        timeout=5) as item_detail:
+                item_json = json.loads(item_detail.text)
+            if item_json['error']:
+                raise globj.ResponseError(item_json['message'] + '(item detail)')
+
+            item_json = item_json['body']
+            create_date = date.fromisoformat(item_json['createDate'].split('T')[0])
+            item_info[item_json['illustId']] = {
+                'illustId': item_json['illustId'],
+                'illustTitle': item_json['illustTitle'],
+                'createDate': create_date,
+                'url': item_json['urls']['original'],
+                'userId': item_json['userId'],
+                'userName': item_json['userName'],
+                'pageCount': item_json['pageCount']}
+            if len(item_info) == num:  # If num == 0, fetch all illustration of the user
+                return item_info
+        return item_info
+    except requests.Timeout:
+        raise requests.Timeout('Timeout during getting new items.')
+    except globj.ResponseError:
+        raise
+
+
+def download_pic(se, proxy: dict, ins: dict, path: tuple):
+    """
+    Download illustration.
+    Args:
+        se: Session instance.
+        proxy: (optinal) the proxy used.
+        ins: an instance generated by get_new().
+        path: save path. A tuple generated by path_name().
+    """
+    # Needs retry function when timeout
+    referer = 'https://www.pixiv.net/member_illust.php?mode=medium&illust_id=' + ins['illustId']
+    re_page = re.compile(r'_p0')
+
+    try:
+        for i in range(int(ins['pageCount'])):
+            real_url = re_page.sub('_p' + str(i), ins['url']) if ins['pageCount'] > 1 else ins['url']
+            if not os.path.exists(path[0]):
+                print('mkdir:', path[0])
+                os.makedirs(path[0])
+            file_name = ''.join((path[1], '_p', str(i), os.path.splitext(real_url)[1]))
+            file_path = os.path.join(path[0], file_name)
+            if not os.path.exists(file_path):  # If file exists, skip it
+                print('downloading', file_path)
+                header = {'Referer': referer,
+                          'User-Agent': globj.user_agent[random.randint(0, 2)]}  # Use random user-agent
+                se.headers.update(header)
+                try:
+                    with se.get(real_url,
+                                headers=header,
+                                proxies=proxy,
+                                cookies=se.cookies,
+                                stream=True,
+                                timeout=5) as pic_res:
+                        with open(file_path, 'ab') as data:
+                            for chunk in pic_res.iter_content():
+                                data.write(chunk)
+                except OSError as e:  # Catch I/O error and skip it
+                    print(repr(e))
+                time.sleep(random.uniform(0, 1.5))
+            else:
+                print('skip', file_path)
+    except requests.Timeout:
+        raise requests.Timeout('Timeout during retrieving', ins['url'])
+
+
+def path_name(item, save_path: str, folder_rule: dict = None, file_rule: dict = None) -> tuple:
+    """
+    Create file name and path.
+    Args:
+        item: An instance generated by get_new().
+        save_path: Save path.
+        folder_rule: Dictionary to describe how to create folder tree.
+        file_rule: Dictionary to describe how to create file name.
+            Rule dict should like this: {0: 'id', 1: 'name', ...}
+    """
+    if folder_rule is None:
+        folder_name = item['userId']  # Default folder name: userId
+    else:
+        folder_name = ''
+        for i in range(len(folder_rule)):
+            next_name = globj.name_verify(str(item[folder_rule[i]]), item['userId'])
+            folder_name = os.path.join(folder_name, next_name)
+        folder_name = os.path.join(save_path, folder_name)
+
+    if file_rule is None:
+        file_name = item['illustId']  # Default folder name: illustId
+    else:
+        raw = (globj.name_verify(str(item[file_rule[i]]), item['userId']) for i in range(len(file_rule)))
+        file_name = '_'.join(raw)  # File name without page number and ext
+
+    return folder_name, file_name
