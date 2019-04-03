@@ -20,6 +20,16 @@ class ResponseError(Exception):
         return repr(self.msg)
 
 
+class ValidationError(Exception):
+    """Exception for wrong user-id or password."""
+
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __str__(self):
+        return repr(self.msg)
+
+
 def name_verify(name: str, default: str) -> str:
     """Normalize file/folder name."""
     # TODO: Different behavior based on platform

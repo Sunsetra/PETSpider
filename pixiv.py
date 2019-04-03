@@ -40,10 +40,17 @@ def login(se, proxy: dict, uid: str, pw: str):
                                   data=login_form,
                                   cookies=se.cookies,
                                   timeout=5)
-        se.cookies.update(login_res.cookies)
+        login_json = json.loads(login_res.text)['body']
+        if 'validation_errors' in login_json:
+            raise globj.ValidationError(login_json['validation_errors'])
+        elif 'success' in login_json:
+            se.cookies.update(login_res.cookies)
+            return True
+        else:
+            return False
     except requests.Timeout:
-        raise requests.Timeout('Timeout during Logining.')
-    except globj.ResponseError:
+        raise requests.Timeout('Timeout during Login.')
+    except (globj.ResponseError, globj.ValidationError):
         raise
 
 
@@ -95,7 +102,6 @@ def get_new(se, proxy: dict = None, num: int = 0, user_id: str = '') -> dict:
                 user_json = json.loads(user_res.text)
             if user_json['error']:
                 raise globj.ResponseError(user_json['message'] + '(user pic)')
-
             user_json = user_json['body']
             if user_json['manga'] and user_json['illusts']:  # Combine illustration and comic into one dict
                 item_dic = {**user_json['illusts'], **user_json['manga']}
@@ -113,34 +119,45 @@ def get_new(se, proxy: dict = None, num: int = 0, user_id: str = '') -> dict:
                 new_node = new_html.find(id='js-mount-point-latest-following')
                 if not new_node:
                     raise globj.ResponseError('Cannot fetch new following items.')
-
-                item_json = json.loads(new_node['data-items'])
-                item_dic.update({item['illustId']: None for item in item_json})
+                p_json = json.loads(new_node['data-items'])
+                item_dic.update({item['illustId']: None for item in p_json})
 
         for pid in item_dic:  # Retrieving detail info of illustration
-            with se.get(_ILLUST_URL + pid,
-                        proxies=proxy,
-                        cookies=se.cookies,
-                        timeout=5) as item_detail:
-                item_json = json.loads(item_detail.text)
-            if item_json['error']:
-                raise globj.ResponseError(item_json['message'] + '(item detail)')
+            item_info.update(get_pic(se, pid, proxy))
+            if len(item_info) == num:  # If num == 0, fetch all illustration of the user
+                return item_info
+        return item_info
+    except requests.Timeout:
+        raise requests.Timeout('Timeout during getting new items.')
+    except globj.ResponseError:
+        raise
 
-            item_json = item_json['body']
-            create_date = date.fromisoformat(item_json['createDate'].split('T')[0])
-            item_info[item_json['illustId']] = {
+
+def get_pic(se, pid: str, proxy: dict = None) -> dict:
+    try:
+        with se.get(_ILLUST_URL + pid,
+                    proxies=proxy,
+                    cookies=se.cookies,
+                    timeout=5) as item_detail:
+            item_json = json.loads(item_detail.text)
+        if item_json['error']:
+            raise globj.ResponseError(item_json['message'] + '(illust detail)')
+
+        item_json = item_json['body']
+        create_date = date.fromisoformat(item_json['createDate'].split('T')[0])
+        return {
+            item_json['illustId']: {
                 'illustId': item_json['illustId'],
                 'illustTitle': item_json['illustTitle'],
                 'createDate': create_date,
                 'url': item_json['urls']['original'],
                 'userId': item_json['userId'],
                 'userName': item_json['userName'],
-                'pageCount': item_json['pageCount']}
-            if len(item_info) == num:  # If num == 0, fetch all illustration of the user
-                return item_info
-        return item_info
+                'pageCount': item_json['pageCount']
+            }
+        }
     except requests.Timeout:
-        raise requests.Timeout('Timeout during getting new items.')
+        raise requests.Timeout('Timeout during getting illust detail.')
     except globj.ResponseError:
         raise
 
