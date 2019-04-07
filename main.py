@@ -12,7 +12,6 @@ import pixiv
 # Define misc
 proxy = {'http': '127.0.0.1:1080', 'https': '127.0.0.1:1080'}
 
-
 if __name__ == '__main__':
     session = requests.Session()  # Need to save cookies instead of login every time
     retries = Retry(total=5, backoff_factor=0.2)
