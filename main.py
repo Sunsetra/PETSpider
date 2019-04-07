@@ -12,6 +12,7 @@ import pixiv
 # Define misc
 proxy = {'http': '127.0.0.1:1080', 'https': '127.0.0.1:1080'}
 
+
 if __name__ == '__main__':
     session = requests.Session()  # Need to save cookies instead of login every time
     retries = Retry(total=5, backoff_factor=0.2)
@@ -34,16 +35,33 @@ if __name__ == '__main__':
         # following = pixiv.get_following(session, proxy)
         # print(following)
 
-        new_items1 = pixiv.get_new(session, proxy, 21)
-        new_items2 = pixiv.get_new(session, proxy, 10, user_id='947930')
-        new_items3 = pixiv.get_pic(session, '74008554', proxy)
-        print(len(new_items1), new_items1)
-        print(len(new_items2), new_items2)
-        print(len(new_items3), new_items3)
+        # new_items1 = pixiv.get_new(session, proxy, 57)
+        new_items2 = pixiv.get_new(session, proxy, 20, user_id='947930')
+        # new_items3 = pixiv.get_detail(session, '74008554', proxy)
+        # print(len(new_items1), new_items1)
+        # print(len(new_items2), new_items2)
+        # print(len(new_items3), new_items3)
 
-        for inst in new_items3.values():
-            file_path = pixiv.path_name(inst, os.path.abspath('.'), {0: 'userName', 1: 'illustTitle'}, {0: 'illustId'})
-            pixiv.download_pic(session, proxy, inst, file_path)
+        update = []
+        for pid in new_items2:
+            fet_pic = pixiv.fetcher(pid)
+            if not fet_pic:
+                print('Not in database.')
+                fet_pic = pixiv.get_detail(session, pid, proxy)
+                update.append(fet_pic)
+            else:
+                print('Fetch from database')
+            file_path = pixiv.path_name(fet_pic, os.path.abspath('.'), {0: 'userName', 1: 'illustTitle'}, {0: 'illustId'})
+            print(file_path)
+        pixiv.pusher(update)
+
+        # pixiv.download_pic(session, proxy, fet_pic, file_path)
+
+        # fet_pic = pixiv.fetcher('74008554')
+        # if not fet_pic:
+        #     new_item = pixiv.get_detail(session, '74008554', proxy)
+        #     pixiv.pusher(new_item.values())
+        #     fet_data = new_item
 
     # All exceptions must be catch in main
     except requests.Timeout as e:
