@@ -34,15 +34,16 @@ if __name__ == '__main__':
         # following = pixiv.get_following(session, proxy)
         # print(following)
 
-        # new_items1 = pixiv.get_new(session, proxy, 57)
-        new_items2 = pixiv.get_new(session, proxy, 20, user_id='947930')
+        new_items1 = pixiv.get_new(session, proxy, 8)
+        print(new_items1)
+        # new_items2 = pixiv.get_new(session, proxy, 20, user_id='947930')
         # new_items3 = pixiv.get_detail(session, '74008554', proxy)
         # print(len(new_items1), new_items1)
         # print(len(new_items2), new_items2)
         # print(len(new_items3), new_items3)
 
         update = []
-        for pid in new_items2:
+        for pid in new_items1:
             fet_pic = pixiv.fetcher(pid)
             if not fet_pic:
                 print('Not in database.')
@@ -51,10 +52,9 @@ if __name__ == '__main__':
             else:
                 print('Fetch from database')
             file_path = pixiv.path_name(fet_pic, os.path.abspath('.'), {0: 'userName', 1: 'illustTitle'}, {0: 'illustId'})
-            print(file_path)
+            pixiv.download_pic(session, proxy, fet_pic, file_path)
+            print('\n')
         pixiv.pusher(update)
-
-        # pixiv.download_pic(session, proxy, fet_pic, file_path)
 
         # fet_pic = pixiv.fetcher('74008554')
         # if not fet_pic:

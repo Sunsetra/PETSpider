@@ -121,7 +121,7 @@ def get_new(se, proxy: dict = None, num: int = 0, user_id: str = None) -> set:
                 if not new_node:
                     raise globj.ResponseError('Cannot fetch new following items.')
                 p_json = json.loads(new_node['data-items'])
-                item_dic = (item['illustId'] for item in p_json)
+                item_dic.update({item['illustId']: None for item in p_json})
 
         item_set = set()
         for item in item_dic:
@@ -253,41 +253,60 @@ def fetcher(pid: str = None, pname: str = None, uid: str = None,
     At least one parameter must be passed in.
     Args:
         pid: Illustration id. Once pid is specified, the other args are ignored.
+            Return a dictionary of illustration info.
         pname: (optinal) The name of illustration. Support wildcard.
         uid: (optinal) The id of user.
         uname: (optinal) The name of user. Support wildcard.
         t_upper: (optinal) Fetch illustration AFTER this time. Format: YYYY-MM-DD.
         t_lower: (optinal) Fetch illustration BEFORE this time. Format: YYYY-MM-DD.
     Return:
-        A generator of required illustration info.
+        If pid specified, return a dictionary, or return a generator of required illustration info.
     """
     try:
         pdb = sqlite3.connect(os.path.join('database', 'pixiv.db'))
         cursor = pdb.cursor()
-        select_str = "CREATEDATE >= '{0}' AND CREATEDATE <= '{1}'".format(t_upper, t_lower)
+        cursor.execute('''CREATE TABLE IF NOT EXISTS MISC(
+                ILLUSTID    TEXT    PRIMARY KEY NOT NULL,
+                ILLUSTTITLE TEXT    NOT NULL,
+                CREATEDATE  TEXT    NOT NULL,
+                URL         TEXT    NOT NULL,
+                USERID      TEXT    NOT NULL,
+                USERNAME    TEXT    NOT NULL,
+                PAGECOUNT   INT     NOT NULL);''')
+
         if pid:  # If pid specified, the other args are ignored
-            select_str = "{0} AND ILLUSTID = '{1}'".format(select_str, pid)
+            cursor.execute("SELECT * FROM MISC WHERE ILLUSTID = '{0}'".format(pid))
+            result = cursor.fetchone()
+            return {
+                'illustId': result[0],
+                'illustTitle': result[1],
+                'createDate': result[2],
+                'url': result[3],
+                'userId': result[4],
+                'userName': result[5],
+                'pageCount': result[6]
+            } if result else None
         else:
+            select_str = "CREATEDATE >= '{0}' AND CREATEDATE <= '{1}'".format(t_upper, t_lower)
             if pname:
                 select_str = "{0} AND ILLUSTTITLE GLOB '{1}'".format(select_str, pname)
             if uid:
                 select_str = "{0} AND USERID = '{1}'".format(select_str, uid)
             if uname:
                 select_str = "{0} AND USERNAME GLOB '{1}'".format(select_str, uname)
-        cursor.execute('SELECT * FROM MISC WHERE ' + select_str)
-
-        return ({
-            'illustId': row[0],
-            'illustTitle': row[1],
-            'createDate': row[2],
-            'url': row[3],
-            'userId': row[4],
-            'userName': row[5],
-            'pageCount': row[6]
-        } for row in cursor)
+            cursor.execute('SELECT * FROM MISC WHERE ' + select_str)
+            return ({
+                'illustId': row[0],
+                'illustTitle': row[1],
+                'createDate': row[2],
+                'url': row[3],
+                'userId': row[4],
+                'userName': row[5],
+                'pageCount': row[6]
+            } for row in cursor)
     except sqlite3.OperationalError as e:
         print(repr(e))
-        return ()
+        return None
 
 
 def pusher(all_item: list):
@@ -321,9 +340,21 @@ def pusher(all_item: list):
     pdb.close()
 
 
+def clearer():
+    """Clear database info cache."""
+    pdb = sqlite3.connect(os.path.join('database', 'pixiv.db'))
+    cursor = pdb.cursor()
+    cursor.execute('''DELETE FROM MISC;''')
+    pdb.commit()
+    pdb.close()
+
+
 if __name__ == '__main__':
-    # fetcher(pid='73437393')
-    # fetcher(uid='355065')
+    print("fetcher(pid='73437393')", fetcher(pid='73437393'))
+    print('\n')
+    for x in fetcher(uid='355065'):
+        print(x)
+    print('\n')
     # fetcher(uname='朝凪')
     # fetcher(uname='朝?', pname='*仲良*')
     # fetcher(uname='*109')
@@ -332,5 +363,6 @@ if __name__ == '__main__':
     # fetcher(ctime='2019-03-01', uid='355065')
     for x in fetcher(uname='朝?', pname='*仲良*'):
         print(x)
+    print('\n')
     for y in fetcher(t_upper='2019-03-01', uid='355065'):
         print(y)
