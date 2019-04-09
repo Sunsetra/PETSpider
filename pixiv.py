@@ -225,7 +225,7 @@ def download_pic(se, proxy: dict, item: dict, path: tuple):
             if not os.path.exists(file_path):  # If file exists, skip it
                 print('downloading', file_path)
                 header = {'Referer': referer,
-                          'User-Agent': globj.user_agent[random.randint(0, 2)]}  # Use random user-agent
+                          'User-Agent': globj.GlobalVar.user_agent}
                 se.headers.update(header)
                 try:
                     with se.get(real_url,
