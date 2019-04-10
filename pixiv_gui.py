@@ -1,16 +1,8 @@
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont, QGuiApplication
-from PyQt5.QtWidgets import QMainWindow, QWidget, QGroupBox, QTabWidget, QLabel, QLineEdit, QPushButton
 from PyQt5.QtWidgets import QVBoxLayout, QFormLayout
-from PyQt5.QtWidgets import QAction, QApplication
-import sys
-import requests
-from PyQt5.QtCore import QCoreApplication
-from requests.adapters import HTTPAdapter
-from urllib3 import Retry
+from PyQt5.QtWidgets import QWidget, QGroupBox, QLineEdit, QPushButton
 
 import pixiv
-import globj
 
 
 class LoginWidget(QWidget):

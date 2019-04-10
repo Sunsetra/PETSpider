@@ -1,8 +1,13 @@
 # coding:utf-8
 """Global objects."""
+import os
 import platform
 import random
 import re
+
+from PyQt5.QtCore import Qt, QSettings
+from PyQt5.QtWidgets import QFormLayout, QHBoxLayout, QVBoxLayout
+from PyQt5.QtWidgets import QWidget, QLineEdit, QGroupBox, QPushButton, QCheckBox
 
 _RE_SYMBOL = re.compile(r'[/\\|*?<>":]')
 _PLATFORM = platform.system()
@@ -37,6 +42,98 @@ class GlobalVar(object):
     @proxy.setter
     def proxy(self, new: dict):
         self._proxy = new
+
+
+class NetSettingDialog(QWidget):
+    def __init__(self, parent):
+        super().__init__()
+        self.parent = parent
+
+        self.cbox_pixiv = QCheckBox('Pixiv')  # Proxy availability
+        self.cbox_ehentai = QCheckBox('Ehentai')  # Proxy availability
+        self.cbox_twitter = QCheckBox('Twitter')  # Proxy availability
+        self.ledit_http = QLineEdit()  # Http proxy
+        self.ledit_https = QLineEdit()  # Https proxy
+
+        self.setWindowModality(Qt.ApplicationModal)
+        self.setWindowFlags(Qt.CustomizeWindowHint | Qt.WindowCloseButtonHint)
+        self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
+        self.init_ui()
+
+    def init_ui(self):
+        self.settings.beginGroup('NetSetting')
+        setting_pixiv_proxy = int(self.settings.value('pixiv_proxy', False))
+        setting_ehentai_proxy = int(self.settings.value('ehentai_proxy', False))
+        setting_twitter_proxy = int(self.settings.value('twitter_proxy', False))
+        setting_http = self.settings.value('http_proxy', '')
+        setting_https = self.settings.value('https_proxy', '')
+        self.cbox_pixiv.setChecked(setting_pixiv_proxy)
+        self.cbox_ehentai.setChecked(setting_ehentai_proxy)
+        self.cbox_twitter.setChecked(setting_twitter_proxy)
+        self.ledit_http.setPlaceholderText('服务器地址:端口号')
+        self.ledit_https.setPlaceholderText('服务器地址:端口号')
+        self.ledit_http.setText(setting_http)
+        self.ledit_https.setText(setting_https)
+        self.ledit_http.setContextMenuPolicy(Qt.NoContextMenu)
+        self.ledit_https.setContextMenuPolicy(Qt.NoContextMenu)
+        self.settings.endGroup()
+        button_ok = QPushButton('确定', self)
+        button_ok.setDefault(True)
+        button_canc = QPushButton('取消', self)
+        button_ok.clicked.connect(self.store)
+        button_canc.clicked.connect(self.close)
+
+        gbox_proxy = QGroupBox('代理设置')
+        hlay_cbox = QHBoxLayout()  # Checkbox for different website
+        hlay_cbox.addWidget(self.cbox_pixiv)
+        hlay_cbox.addWidget(self.cbox_ehentai)
+        hlay_cbox.addWidget(self.cbox_twitter)
+
+        flay_proxy = QFormLayout()  # Lineedit for server_ip:port
+        flay_proxy.setSpacing(20)
+        flay_proxy.addRow('http://', self.ledit_http)
+        flay_proxy.addRow('https://', self.ledit_https)
+
+        vlay_cbox = QVBoxLayout()  # Combine into GroupBox
+        vlay_cbox.setSpacing(20)
+        vlay_cbox.addLayout(hlay_cbox)
+        vlay_cbox.addLayout(flay_proxy)
+        gbox_proxy.setLayout(vlay_cbox)
+
+        hlay_proxy = QHBoxLayout()  # Confirm and cancel button
+        hlay_proxy.addStretch(1)
+        hlay_proxy.addWidget(button_ok)
+        hlay_proxy.addWidget(button_canc)
+        hlay_proxy.addStretch(1)
+
+        vlay_proxy = QVBoxLayout()  # All component
+        vlay_proxy.addWidget(gbox_proxy)
+        vlay_proxy.addLayout(hlay_proxy)
+        self.setLayout(vlay_proxy)
+
+        self.setFixedSize(self.sizeHint())
+        self.move(self.parent.x() + (self.parent.width() - self.sizeHint().width()) / 2,
+                  self.parent.y() + (self.parent.height() - self.sizeHint().height()) / 2)
+        self.setWindowTitle('网络设置')
+
+    def store(self):
+        if not self.ledit_http.text() and not self.ledit_https.text():
+            self.cbox_pixiv.setChecked(False)
+            self.cbox_ehentai.setChecked(False)
+            self.cbox_twitter.setChecked(False)
+        self.settings.beginGroup('NetSetting')
+        self.settings.setValue('pixiv_proxy', int(self.cbox_pixiv.isChecked()))
+        self.settings.setValue('ehentai_proxy', int(self.cbox_ehentai.isChecked()))
+        self.settings.setValue('twitter_proxy', int(self.cbox_twitter.isChecked()))
+        self.settings.setValue('http_proxy', self.ledit_http.text())
+        self.settings.setValue('https_proxy', self.ledit_https.text())
+        self.settings.sync()
+        self.settings.endGroup()
+        self.close()
+
+    def keyPressEvent(self, k):
+        if k.key() == Qt.Key_Escape:
+            self.close()
 
 
 class ResponseError(Exception):

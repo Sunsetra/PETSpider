@@ -2,21 +2,18 @@
 """A crawler for Pixiv, E-hentai and twitter."""
 import os
 import sys
-
 from multiprocessing import freeze_support
 
 import requests
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QSettings, QCoreApplication
 from PyQt5.QtGui import QFont, QGuiApplication
-from PyQt5.QtWidgets import QMainWindow, QWidget, QGroupBox, QTabWidget, QLabel, QLineEdit, QPushButton
-from PyQt5.QtWidgets import QVBoxLayout, QFormLayout
 from PyQt5.QtWidgets import QAction, QApplication
-
-from PyQt5.QtCore import QCoreApplication
+from PyQt5.QtWidgets import QMainWindow, QTabWidget
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
-import pixiv_gui
+
 import globj
+import pixiv_gui
 
 
 class MainWindow(QMainWindow):
@@ -28,6 +25,7 @@ class MainWindow(QMainWindow):
         self.resolution = QGuiApplication.primaryScreen().availableGeometry()
         self.reso_height = self.resolution.height()
         self.reso_width = self.resolution.width()
+        self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
 
         self.pixiv_wid = None  # Pixiv tab
         self.pixiv_var = None  # Pixiv global vars
@@ -35,6 +33,8 @@ class MainWindow(QMainWindow):
         self.ehentai_var = None
         self.twitter_wid = None
         self.twitter_var = None
+
+        self.net_setting = None  # NetSetting instance
 
         self.init_ui()
 
@@ -50,9 +50,10 @@ class MainWindow(QMainWindow):
         act_exit.triggered.connect(QCoreApplication.quit)
         file_menu.addAction(act_exit)
 
-        # setting_menu = menu_bar.addMenu('设置(&S)')
-        # net_setting = QAction('网络设置(&N)', self)
-        # setting_menu.addAction(net_setting)
+        setting_menu = menu_bar.addMenu('设置(&S)')
+        net_setting = QAction('网络设置(&N)', self)
+        setting_menu.addAction(net_setting)
+        net_setting.triggered.connect(self.net_setting_dialog)
 
         self.pixiv_wid = pixiv_gui.LoginWidget(self.pixiv_var)
         tab_widget.addTab(self.pixiv_wid, 'Pixiv')
@@ -78,9 +79,14 @@ class MainWindow(QMainWindow):
         global_var = globj.GlobalVar(session, proxy)
         return global_var  # 这个全局变量组传给相应分模块的各构造类的构造函数
 
+    def net_setting_dialog(self):
+        self.net_setting = globj.NetSettingDialog(self)
+        self.net_setting.setAttribute(Qt.WA_DeleteOnClose)
+        # self.net_setting.destroyed.connect(self.client_setting_checker)  # 此时检查设置文件的变动
+        self.net_setting.show()
+
 
 if __name__ == '__main__':
-
     freeze_support()  # Multiprocessing support when package
     if getattr(sys, 'frozen', False):  # Search for runtime path
         bundle_dir = getattr(sys, '_MEIPASS', None)
