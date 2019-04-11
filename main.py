@@ -28,11 +28,11 @@ class MainWindow(QMainWindow):
         self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
 
         self.pixiv_wid = None  # Pixiv tab
-        self.pixiv_var = None  # Pixiv global vars
+        self.pixiv_var = self.init_var('pixiv')  # Pixiv global vars
         self.ehentai_wid = None
-        self.ehentai_var = None
+        self.ehentai_var = self.init_var('ehentai')
         self.twitter_wid = None
-        self.twitter_var = None
+        self.twitter_var = self.init_var('twitter')
 
         self.net_setting = None  # NetSetting instance
 
@@ -65,19 +65,27 @@ class MainWindow(QMainWindow):
         self.show()
 
     def init_var(self, tab: str):
-        # 按tab类型读取相应保存的cookies并生成相应tab的session
-        # 构建对应tab的全局变量并返回它
-        if tab == 'Pixiv':
-            session = requests.Session()  # Need to save cookies instead of login every time
+        session = requests.Session()  # 读取cookies的条件是配置中的设置
+        # self.settings.beginGroup('Cookies')
+        # if tab == 'pixiv':
+        #     cookies = self.settings.value('pixiv', '')
+        # elif tab == 'ehentai':
+        #     cookies = self.settings.value('ehentai', '')
+        # elif tab == 'twitter':
+        #     cookies = self.settings.value('twitter', '')
+        # else:
+        #     cookies = ''
+        # self.settings.endGroup()
+        # session.cookies.update(cookies)
+
         retries = Retry(total=5, backoff_factor=0.2)
         adp = HTTPAdapter(max_retries=retries)
         session.mount('http://', adp)
         session.mount('https://', adp)
-
-        # 从设置中读取proxy，之后对proxy的更改从qlineedit中读取
-        proxy = {'http': '127.0.0.1:1080', 'https': '127.0.0.1:1080'}
-        global_var = globj.GlobalVar(session, proxy)
-        return global_var  # 这个全局变量组传给相应分模块的各构造类的构造函数
+        self.settings.beginGroup('NetSetting')
+        proxy = self.settings.value('proxy', {})
+        self.settings.endGroup()
+        return globj.GlobalVar(session, proxy)  # 这个全局变量组传给相应分模块的各构造类的构造函数
 
     def net_setting_dialog(self):
         self.net_setting = globj.NetSettingDialog(self)

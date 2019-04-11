@@ -7,9 +7,10 @@ import re
 
 from PyQt5.QtCore import Qt, QSettings
 from PyQt5.QtWidgets import QFormLayout, QHBoxLayout, QVBoxLayout
-from PyQt5.QtWidgets import QWidget, QLineEdit, QGroupBox, QPushButton, QCheckBox
+from PyQt5.QtWidgets import QWidget, QLineEdit, QGroupBox, QPushButton, QCheckBox, QMessageBox
 
 _RE_SYMBOL = re.compile(r'[/\\|*?<>":]')
+_RE_PROXY = re.compile(r'.*:([1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{4}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')
 _PLATFORM = platform.system()
 
 
@@ -65,15 +66,14 @@ class NetSettingDialog(QWidget):
         setting_pixiv_proxy = int(self.settings.value('pixiv_proxy', False))
         setting_ehentai_proxy = int(self.settings.value('ehentai_proxy', False))
         setting_twitter_proxy = int(self.settings.value('twitter_proxy', False))
-        setting_http = self.settings.value('http_proxy', '')
-        setting_https = self.settings.value('https_proxy', '')
+        setting_proxy = self.settings.value('proxy', {'http': '', 'https': ''})
         self.cbox_pixiv.setChecked(setting_pixiv_proxy)
         self.cbox_ehentai.setChecked(setting_ehentai_proxy)
         self.cbox_twitter.setChecked(setting_twitter_proxy)
         self.ledit_http.setPlaceholderText('服务器地址:端口号')
         self.ledit_https.setPlaceholderText('服务器地址:端口号')
-        self.ledit_http.setText(setting_http)
-        self.ledit_https.setText(setting_https)
+        self.ledit_http.setText(setting_proxy['http'])
+        self.ledit_https.setText(setting_proxy['https'])
         self.ledit_http.setContextMenuPolicy(Qt.NoContextMenu)
         self.ledit_https.setContextMenuPolicy(Qt.NoContextMenu)
         self.settings.endGroup()
@@ -117,19 +117,24 @@ class NetSettingDialog(QWidget):
         self.setWindowTitle('网络设置')
 
     def store(self):
-        if not self.ledit_http.text() and not self.ledit_https.text():
-            self.cbox_pixiv.setChecked(False)
-            self.cbox_ehentai.setChecked(False)
-            self.cbox_twitter.setChecked(False)
-        self.settings.beginGroup('NetSetting')
-        self.settings.setValue('pixiv_proxy', int(self.cbox_pixiv.isChecked()))
-        self.settings.setValue('ehentai_proxy', int(self.cbox_ehentai.isChecked()))
-        self.settings.setValue('twitter_proxy', int(self.cbox_twitter.isChecked()))
-        self.settings.setValue('http_proxy', self.ledit_http.text())
-        self.settings.setValue('https_proxy', self.ledit_https.text())
-        self.settings.sync()
-        self.settings.endGroup()
-        self.close()
+        http_proxy = self.ledit_http.text()
+        https_proxy = self.ledit_https.text()
+        if (_RE_PROXY.match(http_proxy) or not http_proxy) and (_RE_PROXY.match(https_proxy) or not https_proxy):
+            self.settings.beginGroup('NetSetting')
+            self.settings.setValue('pixiv_proxy', int(self.cbox_pixiv.isChecked()))
+            self.settings.setValue('ehentai_proxy', int(self.cbox_ehentai.isChecked()))
+            self.settings.setValue('twitter_proxy', int(self.cbox_twitter.isChecked()))
+            self.settings.setValue('proxy', {'http': http_proxy, 'https': https_proxy})
+            self.settings.sync()
+            self.settings.endGroup()
+            self.close()
+        else:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle('错误')
+            msg_box.setIcon(QMessageBox.Warning)
+            msg_box.setText('请输入正确的代理地址。')
+            msg_box.addButton('确定', QMessageBox.AcceptRole)
+            msg_box.exec()
 
     def keyPressEvent(self, k):
         if k.key() == Qt.Key_Escape:
