@@ -263,9 +263,9 @@ def fetcher(pid: str = None, pname: str = None, uid: str = None,
         If pid specified, return a dictionary, or return a generator of required illustration info.
     """
     try:
-        pdb = sqlite3.connect(os.path.join('database', 'pixiv.db'))
+        pdb = sqlite3.connect('database.db')
         cursor = pdb.cursor()
-        cursor.execute('''CREATE TABLE IF NOT EXISTS MISC(
+        cursor.execute('''CREATE TABLE IF NOT EXISTS PIXIV(
                 ILLUSTID    TEXT    PRIMARY KEY NOT NULL,
                 ILLUSTTITLE TEXT    NOT NULL,
                 CREATEDATE  TEXT    NOT NULL,
@@ -275,7 +275,7 @@ def fetcher(pid: str = None, pname: str = None, uid: str = None,
                 PAGECOUNT   INT     NOT NULL);''')
 
         if pid:  # If pid specified, the other args are ignored
-            cursor.execute("SELECT * FROM MISC WHERE ILLUSTID = '{0}'".format(pid))
+            cursor.execute("SELECT * FROM PIXIV WHERE ILLUSTID = '{0}'".format(pid))
             result = cursor.fetchone()
             return {
                 'illustId': result[0],
@@ -294,7 +294,7 @@ def fetcher(pid: str = None, pname: str = None, uid: str = None,
                 select_str = "{0} AND USERID = '{1}'".format(select_str, uid)
             if uname:
                 select_str = "{0} AND USERNAME GLOB '{1}'".format(select_str, uname)
-            cursor.execute('SELECT * FROM MISC WHERE ' + select_str)
+            cursor.execute('SELECT * FROM PIXIV WHERE ' + select_str)
             return ({
                 'illustId': row[0],
                 'illustTitle': row[1],
@@ -315,9 +315,9 @@ def pusher(all_item: list):
     Args:
         all_item: A list of dictionary that contains the illustration info.
     """
-    pdb = sqlite3.connect(os.path.join('database', 'pixiv.db'))
+    pdb = sqlite3.connect('database.db')
     cursor = pdb.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS MISC(
+    cursor.execute('''CREATE TABLE IF NOT EXISTS PIXIV(
         ILLUSTID    TEXT    PRIMARY KEY NOT NULL,
         ILLUSTTITLE TEXT    NOT NULL,
         CREATEDATE  TEXT    NOT NULL,
@@ -335,16 +335,16 @@ def pusher(all_item: list):
         item['userName'],
         item['pageCount']
     ) for item in all_item)
-    cursor.executemany('INSERT INTO MISC VALUES (?, ?, ?, ?, ?, ?, ?)', data)
+    cursor.executemany('INSERT INTO PIXIV VALUES (?, ?, ?, ?, ?, ?, ?)', data)
     pdb.commit()
     pdb.close()
 
 
 def clearer():
     """Clear database info cache."""
-    pdb = sqlite3.connect(os.path.join('database', 'pixiv.db'))
+    pdb = sqlite3.connect('database.db')
     cursor = pdb.cursor()
-    cursor.execute('''DELETE FROM MISC;''')
+    cursor.execute('''DELETE FROM PIXIV;''')
     pdb.commit()
     pdb.close()
 

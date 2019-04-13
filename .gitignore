@@ -118,3 +118,6 @@ dmypy.json
 
 # settings
 *.ini
+
+# database
+*.db

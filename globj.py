@@ -131,7 +131,7 @@ class NetSettingDialog(QWidget):
         else:
             msg_box = QMessageBox(self)
             msg_box.setWindowTitle('错误')
-            msg_box.setIcon(QMessageBox.Warning)
+            msg_box.setIcon(QMessageBox.Critical)
             msg_box.setText('请输入正确的代理地址。')
             msg_box.addButton('确定', QMessageBox.AcceptRole)
             msg_box.exec()

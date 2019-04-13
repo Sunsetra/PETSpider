@@ -65,20 +65,13 @@ class MainWindow(QMainWindow):
         self.show()
 
     def init_var(self, tab: str):
-        session = requests.Session()  # 读取cookies的条件是配置中的设置
-        # self.settings.beginGroup('Cookies')
-        # if tab == 'pixiv':
-        #     cookies = self.settings.value('pixiv', '')
-        # elif tab == 'ehentai':
-        #     cookies = self.settings.value('ehentai', '')
-        # elif tab == 'twitter':
-        #     cookies = self.settings.value('twitter', '')
-        # else:
-        #     cookies = ''
-        # self.settings.endGroup()
-        # session.cookies.update(cookies)
+        session = requests.Session()
+        self.settings.beginGroup('Cookies')
+        cookies = self.settings.value(tab, '')
+        self.settings.endGroup()
+        session.cookies.update(cookies)
 
-        retries = Retry(total=5, backoff_factor=0.2)
+        retries = Retry(total=3, backoff_factor=0.2)
         adp = HTTPAdapter(max_retries=retries)
         session.mount('http://', adp)
         session.mount('https://', adp)
@@ -90,8 +83,17 @@ class MainWindow(QMainWindow):
     def net_setting_dialog(self):
         self.net_setting = globj.NetSettingDialog(self)
         self.net_setting.setAttribute(Qt.WA_DeleteOnClose)
-        # self.net_setting.destroyed.connect(self.client_setting_checker)  # 此时检查设置文件的变动
+        self.net_setting.destroyed.connect(self.net_setting_checker)  # 此时检查设置文件的变动
         self.net_setting.show()
+
+    def net_setting_checker(self):
+        self.settings.beginGroup('NetSetting')
+        if int(self.settings.value('pixiv_proxy', False)):
+            self.pixiv_var.proxy = self.settings.value('proxy', {})
+        else:
+            self.pixiv_var.proxy = {}
+        # There also need ehentai and twitter proxy changer later
+        self.settings.endGroup()
 
 
 if __name__ == '__main__':
