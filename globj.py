@@ -5,7 +5,7 @@ import platform
 import random
 import re
 
-from PyQt5.QtCore import Qt, QSettings
+from PyQt5.QtCore import Qt, QSettings, pyqtSignal
 from PyQt5.QtWidgets import QFormLayout, QHBoxLayout, QVBoxLayout
 from PyQt5.QtWidgets import QWidget, QLineEdit, QGroupBox, QPushButton, QCheckBox, QMessageBox
 
@@ -46,10 +46,11 @@ class GlobalVar(object):
 
 
 class NetSettingDialog(QWidget):
-    def __init__(self, parent):
-        super().__init__()
-        self.parent = parent
+    """NetSetting dialog class."""
+    closed = pyqtSignal()
 
+    def __init__(self):
+        super().__init__()
         self.cbox_pixiv = QCheckBox('Pixiv')  # Proxy availability
         self.cbox_ehentai = QCheckBox('Ehentai')  # Proxy availability
         self.cbox_twitter = QCheckBox('Twitter')  # Proxy availability
@@ -67,6 +68,8 @@ class NetSettingDialog(QWidget):
         setting_ehentai_proxy = int(self.settings.value('ehentai_proxy', False))
         setting_twitter_proxy = int(self.settings.value('twitter_proxy', False))
         setting_proxy = self.settings.value('proxy', {'http': '', 'https': ''})
+        self.settings.endGroup()
+
         self.cbox_pixiv.setChecked(setting_pixiv_proxy)
         self.cbox_ehentai.setChecked(setting_ehentai_proxy)
         self.cbox_twitter.setChecked(setting_twitter_proxy)
@@ -76,7 +79,7 @@ class NetSettingDialog(QWidget):
         self.ledit_https.setText(setting_proxy['https'])
         self.ledit_http.setContextMenuPolicy(Qt.NoContextMenu)
         self.ledit_https.setContextMenuPolicy(Qt.NoContextMenu)
-        self.settings.endGroup()
+
         button_ok = QPushButton('确定', self)
         button_ok.setDefault(True)
         button_canc = QPushButton('取消', self)
@@ -112,8 +115,6 @@ class NetSettingDialog(QWidget):
         self.setLayout(vlay_proxy)
 
         self.setFixedSize(self.sizeHint())
-        self.move(self.parent.x() + (self.parent.width() - self.sizeHint().width()) / 2,
-                  self.parent.y() + (self.parent.height() - self.sizeHint().height()) / 2)
         self.setWindowTitle('网络设置')
 
     def store(self):
@@ -140,6 +141,9 @@ class NetSettingDialog(QWidget):
         if k.key() == Qt.Key_Escape:
             self.close()
 
+    def closeEvent(self, event):
+        self.closed.emit()
+
 
 class ResponseError(Exception):
     """Exception for abnormal response."""
@@ -159,6 +163,15 @@ class ValidationError(Exception):
 
     def __str__(self):
         return repr(self.msg)
+
+
+def show_messagebox(parent, style, title: str, message: str):
+    msg_box = QMessageBox(parent)
+    msg_box.setWindowTitle(title)
+    msg_box.setIcon(style)
+    msg_box.setText(message)
+    msg_box.addButton('确定', QMessageBox.AcceptRole)
+    msg_box.exec()
 
 
 def name_verify(name: str, default: str = 'NoName') -> str:
