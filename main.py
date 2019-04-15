@@ -27,15 +27,15 @@ class MainWindow(QMainWindow):
         self.reso_width = self.resolution.width()
         self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
 
-        self.pixiv_var = self.init_var('pixiv')  # Pixiv global vars
+        self.pixiv_var = self.init_var()  # Pixiv global vars
         self.pixiv_login = pixiv_gui.LoginWidget(self.pixiv_var)  # Pixiv login page
         self.pixiv_login.login_success.connect(self.pixiv_tab_changer)
         self.pixiv_main = pixiv_gui.MainWidget(self.pixiv_var)  # Pixiv main page
 
         self.ehentai_wid = None
-        self.ehentai_var = self.init_var('ehentai')
+        self.ehentai_var = self.init_var()
         self.twitter_wid = None
-        self.twitter_var = self.init_var('twitter')
+        self.twitter_var = self.init_var()
 
         self.tab_widget = QTabWidget()  # Main widget of main window
         self.tab_widget.setTabShape(QTabWidget.Triangular)
@@ -67,21 +67,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle('PETSpider')
         self.show()
 
-    def init_var(self, tab: str):
+    def init_var(self):
         """
         Construct global instances for every class.
-        Args:
-            tab: The cookies used in which class.
         Return:
             A globj.GlobalVar class instance, should be
             passed to construct func of every modal.
         """
         session = requests.Session()
-        self.settings.beginGroup('Cookies')  # 读取cookies放在登陆时
-        cookies = self.settings.value(tab, '')
-        self.settings.endGroup()
-        session.cookies.update(cookies)
-
         retries = Retry(total=3, backoff_factor=0.2)
         adp = HTTPAdapter(max_retries=retries)
         session.mount('http://', adp)
@@ -89,7 +82,6 @@ class MainWindow(QMainWindow):
         self.settings.beginGroup('NetSetting')
         proxy = self.settings.value('proxy', {})
         self.settings.endGroup()
-
         return globj.GlobalVar(session, proxy)
 
     def net_setting_dialog(self):
@@ -146,17 +138,17 @@ if __name__ == '__main__':
     #
     #     update = []
     #     for pid in new_items1:
-    #         fet_pic = pixiv.fetcher(pid)
-    #         if not fet_pic:
-    #             print('Not in database.')
-    #             fet_pic = pixiv.get_detail(session, pid, proxy)
-    #             update.append(fet_pic)
-    #         else:
-    #             print('Fetch from database')
-    #         file_path = pixiv.path_name(fet_pic, os.path.abspath('.'),
-    #                                     {0: 'userName', 1: 'illustTitle'}, {0: 'illustId'})
-    #         pixiv.download_pic(session, proxy, fet_pic, file_path)
-    #         print('\n')
+    #     #         fet_pic = pixiv.fetcher(pid)
+    #     #         if not fet_pic:
+    #     #             print('Not in database.')
+    #     #             fet_pic = pixiv.get_detail(session, pid, proxy)
+    #     #             update.append(fet_pic)
+    #     #         else:
+    #     #             print('Fetch from database')
+    #     #         file_path = pixiv.path_name(fet_pic, os.path.abspath('.'),
+    #     #                                     {0: 'userName', 1: 'illustTitle'}, {0: 'illustId'})
+    #     #         pixiv.download_pic(session, proxy, fet_pic, file_path)
+    #     #         print('\n')
     #     pixiv.pusher(update)
     #
     #     # fet_pic = pixiv.fetcher('74008554')

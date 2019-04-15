@@ -156,7 +156,7 @@ def get_detail(se, pid: str, proxy: dict = None) -> dict:
             raise globj.ResponseError(item_json['message'] + '(illust detail)')
 
         item_json = item_json['body']
-        create_date = date.fromisoformat(item_json['createDate'].split('T')[0])
+        create_date = item_json['createDate'].split('T')[0]
         return {
             'illustId': item_json['illustId'],
             'illustTitle': item_json['illustTitle'],
