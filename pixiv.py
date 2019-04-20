@@ -1,6 +1,5 @@
 # coding:utf-8
 """Pixiv components."""
-# TODO: Optimize try-except behavior
 import json
 import os
 import random
@@ -54,8 +53,29 @@ def login(se, proxy: dict, uid: str, pw: str):
         raise
 
 
+def get_user(se, proxy: dict) -> tuple:
+    """Get username and pixiv id."""
+    try:
+        with se.get(_ROOT_URL,
+                    proxies=proxy,
+                    cookies=se.cookies,
+                    timeout=5) as user_res:
+            user_html = BeautifulSoup(user_res.text, 'lxml')
+        user_node = user_html.find('div', class_='user-name-container')
+        if not user_node:
+            raise globj.ResponseError('Cannot fetch user info.')
+
+        user_id = user_node.a['href'].split('=')[1]
+        user_name = user_node.string
+        return user_id, user_name
+    except requests.Timeout:
+        raise requests.Timeout('Timeout during getting user info.')
+    except globj.ResponseError:
+        raise
+
+
 def get_following(se, proxy: dict) -> dict:
-    """Get the list of the loginned user's following."""
+    """Get the list of loginned user's following."""
     try:
         with se.get(_ROOT_URL + 'bookmark.php',
                     params={'type': 'user'},
@@ -67,8 +87,8 @@ def get_following(se, proxy: dict) -> dict:
         if not fo_node:
             raise globj.ResponseError('Cannot fetch following info.')
 
-        user_info = {ele.a['data-user_id']: ele.a['data-user_name'] for ele in fo_node}
-        return user_info
+        fo_info = {ele.a['data-user_id']: ele.a['data-user_name'] for ele in fo_node}
+        return fo_info
     except requests.Timeout:
         raise requests.Timeout('Timeout during getting following info.')
     except globj.ResponseError:
@@ -350,19 +370,34 @@ def clearer():
 
 
 if __name__ == '__main__':
-    print("fetcher(pid='73437393')", fetcher(pid='73437393'))
-    print('\n')
-    for x in fetcher(uid='355065'):
-        print(x)
-    print('\n')
-    # fetcher(uname='朝凪')
-    # fetcher(uname='朝?', pname='*仲良*')
-    # fetcher(uname='*109')
-    # fetcher(pname='*仲良*')
-    # fetcher(uid='947930', pname='*寒中*')
-    # fetcher(ctime='2019-03-01', uid='355065')
-    for x in fetcher(uname='朝?', pname='*仲良*'):
-        print(x)
-    print('\n')
-    for y in fetcher(t_upper='2019-03-01', uid='355065'):
-        print(y)
+    pass
+    # session = requests.session()
+    # proxy = {'http': 'socks5://127.0.0.1:1080', 'https': 'socks5://127.0.0.1:1080'}
+    # try:
+    #     uid = input('Input user id/email:')
+    #     pw = input('Input password:')
+    #     login(session, proxy, uid, pw)
+    # except (requests.Timeout, globj.ResponseError) as e:
+    #     # Delete Window
+    #     print(repr(e))
+    # except globj.ValidationError as e:
+    #     # Reenter pw and id
+    #     print(repr(e))
+    # print(get_user(session, proxy))
+
+    # print("fetcher(pid='73437393')", fetcher(pid='73437393'))
+    # print('\n')
+    # for x in fetcher(uid='355065'):
+    #     print(x)
+    # print('\n')
+    # # fetcher(uname='朝凪')
+    # # fetcher(uname='朝?', pname='*仲良*')
+    # # fetcher(uname='*109')
+    # # fetcher(pname='*仲良*')
+    # # fetcher(uid='947930', pname='*寒中*')
+    # # fetcher(ctime='2019-03-01', uid='355065')
+    # for x in fetcher(uname='朝?', pname='*仲良*'):
+    #     print(x)
+    # print('\n')
+    # for y in fetcher(t_upper='2019-03-01', uid='355065'):
+    #     print(y)

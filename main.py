@@ -29,8 +29,8 @@ class MainWindow(QMainWindow):
 
         self.pixiv_var = self.init_var()  # Pixiv global vars
         self.pixiv_login = pixiv_gui.LoginWidget(self.pixiv_var)  # Pixiv login page
-        self.pixiv_login.login_success.connect(self.pixiv_tab_changer)
-        self.pixiv_main = pixiv_gui.MainWidget(self.pixiv_var)  # Pixiv main page
+        self.pixiv_login.login_success.connect(self.tab_login)
+        self.pixiv_main = None
 
         self.ehentai_wid = None
         self.ehentai_var = self.init_var()
@@ -84,14 +84,29 @@ class MainWindow(QMainWindow):
         self.settings.endGroup()
         return globj.GlobalVar(session, proxy)
 
+    def tab_login(self, index: int, info=None):
+        """Switch tab widget to main page."""
+        if index == 0:
+            # Recreate main page instance because new main page needs user name/id
+            self.pixiv_main = pixiv_gui.MainWidget(self.pixiv_var, info)
+            self.pixiv_main.logout.connect(self.tab_logout)
+            self.tab_widget.removeTab(index)
+            self.tab_widget.insertTab(0, self.pixiv_main, 'Pixiv')
+
+    def tab_logout(self, index: int):
+        """Switch tab widget to login page."""
+        if index == 0:
+            # Recreate glovar instance bacause old session contains old cookies
+            self.pixiv_var = self.init_var()
+            self.pixiv_login = pixiv_gui.LoginWidget(self.pixiv_var)
+            self.pixiv_login.login_success.connect(self.tab_login)
+            self.tab_widget.removeTab(index)
+            self.tab_widget.insertTab(0, self.pixiv_login, 'Pixiv')
+
     def net_setting_dialog(self):
         self.net_setting.move(self.x() + (self.width() - self.net_setting.sizeHint().width()) / 2,
                               self.y() + (self.height() - self.net_setting.sizeHint().height()) / 2)
         self.net_setting.show()
-
-    def pixiv_tab_changer(self):
-        self.tab_widget.removeTab(0)
-        self.tab_widget.insertTab(0, self.pixiv_main, 'Pixiv')
 
     def net_setting_checker(self):
         self.settings.beginGroup('NetSetting')

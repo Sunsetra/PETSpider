@@ -6,7 +6,7 @@ import random
 import re
 
 from PyQt5.QtCore import Qt, QSettings, pyqtSignal
-from PyQt5.QtWidgets import QFormLayout, QHBoxLayout, QVBoxLayout
+from PyQt5.QtWidgets import QFormLayout, QHBoxLayout, QVBoxLayout, QMenu
 from PyQt5.QtWidgets import QWidget, QLineEdit, QGroupBox, QPushButton, QCheckBox, QMessageBox
 
 _RE_SYMBOL = re.compile(r'[/\\|*?<>":]')
@@ -54,8 +54,8 @@ class NetSettingDialog(QWidget):
         self.cbox_pixiv = QCheckBox('Pixiv')  # Proxy availability
         self.cbox_ehentai = QCheckBox('Ehentai')  # Proxy availability
         self.cbox_twitter = QCheckBox('Twitter')  # Proxy availability
-        self.ledit_http = QLineEdit()  # Http proxy
-        self.ledit_https = QLineEdit()  # Https proxy
+        self.ledit_http = LineEditor()  # Http proxy
+        self.ledit_https = LineEditor()  # Https proxy
 
         self.setWindowModality(Qt.ApplicationModal)
         self.setWindowFlags(Qt.CustomizeWindowHint | Qt.WindowCloseButtonHint)
@@ -77,8 +77,6 @@ class NetSettingDialog(QWidget):
         self.ledit_https.setPlaceholderText('服务器地址:端口号')
         self.ledit_http.setText(setting_proxy['http'])
         self.ledit_https.setText(setting_proxy['https'])
-        self.ledit_http.setContextMenuPolicy(Qt.NoContextMenu)
-        self.ledit_https.setContextMenuPolicy(Qt.NoContextMenu)
 
         button_ok = QPushButton('确定', self)
         button_ok.setDefault(True)
@@ -143,6 +141,35 @@ class NetSettingDialog(QWidget):
 
     def closeEvent(self, event):
         self.closed.emit()
+
+
+class LineEditor(QLineEdit):
+    """Custom QLineEdit. Support cut, copy, paste and select all."""
+    def __init__(self):
+        super().__init__()
+
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        act_select_all = menu.addAction('全选')
+        act_cut = menu.addAction('剪切')
+        act_copy = menu.addAction('复制')
+        act_paste = menu.addAction('粘贴')
+        if not self.text():
+            act_select_all.setEnabled(False)
+            act_cut.setEnabled(False)
+            act_copy.setEnabled(False)
+        else:
+            act_cut.setEnabled(self.hasSelectedText())
+            act_copy.setEnabled(self.hasSelectedText())
+        action = menu.exec(self.mapToGlobal(event.pos()))
+        if action == act_cut:
+            self.cut()
+        elif action == act_copy:
+            self.copy()
+        elif action == act_select_all:
+            self.selectAll()
+        elif action == act_paste:
+            self.paste()
 
 
 class ResponseError(Exception):
