@@ -27,10 +27,9 @@ class MainWindow(QMainWindow):
         self.reso_width = self.resolution.width()
         self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
 
-        self.pixiv_var = self.init_var()  # Pixiv global vars
-        self.pixiv_login = pixiv_gui.LoginWidget(self.pixiv_var)  # Pixiv login page
-        self.pixiv_login.login_success.connect(self.tab_login)
-        self.pixiv_main = None
+        self.pixiv_var = None  # Pixiv global vars
+        self.pixiv_login = None  # Pixiv login page
+        self.pixiv_main = None  # Pixiv main page
 
         self.ehentai_wid = None
         self.ehentai_var = self.init_var()
@@ -42,7 +41,9 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tab_widget)
 
         self.net_setting = globj.NetSettingDialog()
-        self.net_setting.closed.connect(self.net_setting_checker)  # Check changes of settings
+        self.net_setting.closed.connect(self.net_setting_checker)
+        self.dl_setting = globj.DownloadSettingDialog()
+        self.dl_setting.closed.connect(self.dl_setting_checker)
 
         self.init_ui()
 
@@ -56,12 +57,13 @@ class MainWindow(QMainWindow):
 
         setting_menu = menu_bar.addMenu('设置(&S)')
         net_setting = QAction('网络设置(&N)', self)
+        dl_setting = QAction('下载设置(&D)', self)
         setting_menu.addAction(net_setting)
+        setting_menu.addAction(dl_setting)
         net_setting.triggered.connect(self.net_setting_dialog)
+        dl_setting.triggered.connect(self.dl_setting_dialog)
 
-        self.tab_widget.addTab(self.pixiv_login, 'Pixiv')
-        self.tab_widget.addTab(self.ehentai_wid, 'EHentai')
-        self.tab_widget.addTab(self.twitter_wid, 'Twitter')
+        self.tab_login(0)
 
         self.frameGeometry().moveCenter(self.resolution.center())  # Open at middle of screen
         self.setWindowTitle('PETSpider')
@@ -84,22 +86,22 @@ class MainWindow(QMainWindow):
         self.settings.endGroup()
         return globj.GlobalVar(session, proxy)
 
-    def tab_login(self, index: int, info=None):
+    def tab_logout(self, index: int, info=None):
         """Switch tab widget to main page."""
         if index == 0:
             # Recreate main page instance because new main page needs user name/id
             self.pixiv_main = pixiv_gui.MainWidget(self.pixiv_var, info)
-            self.pixiv_main.logout.connect(self.tab_logout)
+            self.pixiv_main.logout.connect(self.tab_login)
             self.tab_widget.removeTab(index)
             self.tab_widget.insertTab(0, self.pixiv_main, 'Pixiv')
 
-    def tab_logout(self, index: int):
+    def tab_login(self, index: int):
         """Switch tab widget to login page."""
         if index == 0:
             # Recreate glovar instance bacause old session contains old cookies
             self.pixiv_var = self.init_var()
             self.pixiv_login = pixiv_gui.LoginWidget(self.pixiv_var)
-            self.pixiv_login.login_success.connect(self.tab_login)
+            self.pixiv_login.login_success.connect(self.tab_logout)
             self.tab_widget.removeTab(index)
             self.tab_widget.insertTab(0, self.pixiv_login, 'Pixiv')
 
@@ -117,6 +119,19 @@ class MainWindow(QMainWindow):
         # There also need ehentai and twitter proxy changer later
         self.settings.endGroup()
 
+    def dl_setting_dialog(self):
+        self.dl_setting.move(self.x() + (self.width() - self.dl_setting.sizeHint().width()) / 2,
+                             self.y() + (self.height() - self.dl_setting.sizeHint().height()) / 2)
+        self.dl_setting.show()
+
+    def dl_setting_checker(self):
+        self.settings.beginGroup('DownloadSetting')
+        if int(self.settings.value('pixiv_proxy', False)):
+            self.pixiv_var.proxy = self.settings.value('proxy', {})
+        else:
+            self.pixiv_var.proxy = {}
+        self.settings.endGroup()
+
 
 if __name__ == '__main__':
     freeze_support()  # Multiprocessing support when package
@@ -127,55 +142,3 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = MainWindow()
     sys.exit(app.exec())
-
-    # try:
-    #     uid = input('Input user id/email:')
-    #     pw = input('Input password:')
-    #     pixiv.login(session, proxy, uid, pw)
-    # except (requests.Timeout, globj.ResponseError) as e:
-    #     # Delete Window
-    #     print(repr(e))
-    # except globj.ValidationError as e:
-    #     # Reenter pw and id
-    #     print(repr(e))
-
-    # try:
-    #     # following = pixiv.get_following(session, proxy)
-    #     # print(following)
-    #
-    #     new_items1 = pixiv.get_new(session, proxy, 8)
-    #     print(new_items1)
-    #     # new_items2 = pixiv.get_new(session, proxy, 20, user_id='947930')
-    #     # new_items3 = pixiv.get_detail(session, '74008554', proxy)
-    #     # print(len(new_items1), new_items1)
-    #     # print(len(new_items2), new_items2)
-    #     # print(len(new_items3), new_items3)
-    #
-    #     update = []
-    #     for pid in new_items1:
-    #     #         fet_pic = pixiv.fetcher(pid)
-    #     #         if not fet_pic:
-    #     #             print('Not in database.')
-    #     #             fet_pic = pixiv.get_detail(session, pid, proxy)
-    #     #             update.append(fet_pic)
-    #     #         else:
-    #     #             print('Fetch from database')
-    #     #         file_path = pixiv.path_name(fet_pic, os.path.abspath('.'),
-    #     #                                     {0: 'userName', 1: 'illustTitle'}, {0: 'illustId'})
-    #     #         pixiv.download_pic(session, proxy, fet_pic, file_path)
-    #     #         print('\n')
-    #     pixiv.pusher(update)
-    #
-    #     # fet_pic = pixiv.fetcher('74008554')
-    #     # if not fet_pic:
-    #     #     new_item = pixiv.get_detail(session, '74008554', proxy)
-    #     #     pixiv.pusher(new_item.values())
-    #     #     fet_data = new_item
-    #
-    # # All exceptions must be catch in main
-    # except requests.Timeout as e:
-    #     session.close()
-    #     print(repr(e))
-    # except globj.ResponseError as e:
-    #     session.close()
-    #     print(repr(e))

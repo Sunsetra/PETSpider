@@ -393,4 +393,3 @@ class MainWidget(QWidget):
         self.fetch_thread.except_signal.connect(globj.show_messagebox)
         self.fetch_thread.finished.connect(partial(self.set_disabled, False))
         self.fetch_thread.start()
-

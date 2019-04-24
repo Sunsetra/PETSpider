@@ -6,8 +6,9 @@ import random
 import re
 
 from PyQt5.QtCore import Qt, QSettings, pyqtSignal
-from PyQt5.QtWidgets import QFormLayout, QHBoxLayout, QVBoxLayout, QMenu
-from PyQt5.QtWidgets import QWidget, QLineEdit, QGroupBox, QPushButton, QCheckBox, QMessageBox
+from PyQt5.QtGui import QFont
+from PyQt5.QtWidgets import QFormLayout, QHBoxLayout, QVBoxLayout, QMenu, QLabel, QFileDialog, QSpinBox, QGridLayout
+from PyQt5.QtWidgets import QWidget, QLineEdit, QGroupBox, QPushButton, QCheckBox, QMessageBox, QComboBox, QTabWidget
 
 _RE_SYMBOL = re.compile(r'[/\\|*?<>":]')
 _RE_PROXY = re.compile(r'.*:([1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{4}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')
@@ -78,11 +79,11 @@ class NetSettingDialog(QWidget):
         self.ledit_http.setText(setting_proxy['http'])
         self.ledit_https.setText(setting_proxy['https'])
 
-        button_ok = QPushButton('确定', self)
-        button_ok.setDefault(True)
-        button_canc = QPushButton('取消', self)
-        button_ok.clicked.connect(self.store)
-        button_canc.clicked.connect(self.close)
+        btn_ok = QPushButton('确定', self)
+        btn_ok.setDefault(True)
+        btn_canc = QPushButton('取消', self)
+        btn_ok.clicked.connect(self.store)
+        btn_canc.clicked.connect(self.close)
 
         gbox_proxy = QGroupBox('代理设置')
         hlay_cbox = QHBoxLayout()  # Checkbox for different website
@@ -103,8 +104,8 @@ class NetSettingDialog(QWidget):
 
         hlay_proxy = QHBoxLayout()  # Confirm and cancel button
         hlay_proxy.addStretch(1)
-        hlay_proxy.addWidget(button_ok)
-        hlay_proxy.addWidget(button_canc)
+        hlay_proxy.addWidget(btn_ok)
+        hlay_proxy.addWidget(btn_canc)
         hlay_proxy.addStretch(1)
 
         vlay_proxy = QVBoxLayout()  # All component
@@ -140,7 +141,179 @@ class NetSettingDialog(QWidget):
             self.close()
 
     def closeEvent(self, event):
+        self.settings.beginGroup('NetSetting')
+        setting_pixiv_proxy = int(self.settings.value('pixiv_proxy', False))
+        setting_ehentai_proxy = int(self.settings.value('ehentai_proxy', False))
+        setting_twitter_proxy = int(self.settings.value('twitter_proxy', False))
+        setting_proxy = self.settings.value('proxy', {'http': '', 'https': ''})
+        self.settings.endGroup()
+
+        self.cbox_pixiv.setChecked(setting_pixiv_proxy)
+        self.cbox_ehentai.setChecked(setting_ehentai_proxy)
+        self.cbox_twitter.setChecked(setting_twitter_proxy)
+        self.ledit_http.setText(setting_proxy['http'])
+        self.ledit_https.setText(setting_proxy['https'])
         self.closed.emit()
+
+
+class DownloadSettingDialog(QTabWidget):
+    """DownloadSetting dialog class."""
+    closed = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowModality(Qt.ApplicationModal)
+        self.setWindowFlags(Qt.CustomizeWindowHint | Qt.WindowCloseButtonHint)
+        self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
+
+        self.root_path = None  # Root path, initial from setting ini.
+        self.folder_rule = {0: 'illustId'}
+        self.file_rule = {0: 'illustId'}
+        self.btn_root = QPushButton('浏览')
+        self.btn_root.clicked.connect(self.choose_dir)
+
+        self.sbox_folder = QSpinBox()
+        self.sbox_folder.setMinimum(1)
+        self.sbox_folder.setMaximum(5)
+        self.sbox_folder.valueChanged.connect(self.folder_updater)
+        self.sbox_file = QSpinBox()
+        self.sbox_file.setMinimum(1)
+        self.sbox_file.setMaximum(5)
+        self.sbox_file.valueChanged.connect(self.file_updater)
+        self.cbox_folder_list = [LayerSelector() for i in range(5)]
+        for wid in self.cbox_folder_list:
+            wid.currentIndexChanged.connect(self.update_rule)
+        self.cbox_file_list = [LayerSelector() for i in range(5)]
+        for wid in self.cbox_file_list:
+            wid.currentIndexChanged.connect(self.update_rule)
+        self.hlay_folder_cbox = QHBoxLayout()
+        self.hlay_file_cbox = QHBoxLayout()
+
+        self.ledit_prev = LineEditor()
+        self.ledit_prev.setReadOnly(True)
+        self.ledit_prev.setContextMenuPolicy(Qt.NoContextMenu)
+
+        self.init_ui()
+
+    def init_ui(self):
+        self.setFont(QFont('Arial', 10))
+        self.settings.beginGroup('DownloadSetting')
+        self.root_path = self.settings.value('root_path', os.path.abspath('.'))
+        self.settings.endGroup()
+        self.previewer()
+
+        glay_folder = QGridLayout()
+        glay_folder.addWidget(QLabel('根目录'), 0, 0, 1, 1)
+        glay_folder.addWidget(self.btn_root, 0, 1, 1, 2)
+        glay_folder.addWidget(QLabel('文件夹层级'), 1, 0, 1, 1)
+        glay_folder.addWidget(self.sbox_folder, 1, 1, 1, 2)
+
+        glay_file = QGridLayout()
+        glay_file.addWidget(QLabel('文件名层级'), 0, 0, 1, 1)
+        glay_file.addWidget(self.sbox_file, 0, 1, 1, 2)
+
+        btn_ok = QPushButton('确定', self)
+        btn_ok.setDefault(True)
+        btn_canc = QPushButton('取消', self)
+        btn_ok.clicked.connect(self.store)
+        btn_canc.clicked.connect(self.close)
+
+        hlay_btn = QHBoxLayout()  # Confirm and cancel button
+        hlay_btn.addStretch(1)
+        hlay_btn.addWidget(btn_ok)
+        hlay_btn.addWidget(btn_canc)
+        hlay_btn.addStretch(1)
+
+        vlay_pixiv = QVBoxLayout()
+        vlay_pixiv.addLayout(glay_folder)
+        vlay_pixiv.addLayout(self.hlay_folder_cbox)
+        vlay_pixiv.addLayout(glay_file)
+        vlay_pixiv.addLayout(self.hlay_file_cbox)
+        vlay_pixiv.addWidget(self.ledit_prev)
+        vlay_pixiv.addLayout(hlay_btn)
+        wid_pixiv = QWidget()
+        wid_pixiv.setLayout(vlay_pixiv)
+
+        self.addTab(wid_pixiv, 'Pixiv')
+
+        for wid in self.cbox_folder_list:
+            self.hlay_folder_cbox.addWidget(wid)
+        for wid in self.cbox_file_list:
+            self.hlay_file_cbox.addWidget(wid)
+        self.setFixedSize(self.sizeHint())
+        self.folder_updater(1)
+        self.file_updater(1)
+        self.setWindowTitle('下载设置')
+
+    def store(self):
+        self.settings.beginGroup('DownloadSetting')
+        self.settings.setValue('root_path', self.root_path)
+        self.settings.sync()
+        self.settings.endGroup()
+        self.close()
+
+    def choose_dir(self):
+        self.settings.beginGroup('DownloadSetting')
+        setting_root_path = self.settings.value('root_path', os.path.abspath('.'))
+        self.root_path = QFileDialog.getExistingDirectory(self, '选择目录', setting_root_path)
+        self.settings.endGroup()
+        self.previewer()
+
+    def folder_updater(self, new):
+        now = self.hlay_folder_cbox.count()
+        if now < new:
+            for i in range(now, new):
+                self.hlay_folder_cbox.addWidget(self.cbox_folder_list[i])
+                self.cbox_folder_list[i].show()
+        else:
+            for i in range(4, new - 1, -1):
+                self.hlay_folder_cbox.removeWidget(self.cbox_folder_list[i])
+                self.cbox_folder_list[i].hide()
+        self.update_rule()
+
+    def file_updater(self, new):
+        now = self.hlay_file_cbox.count()
+        if now < new:
+            for i in range(now, new):
+                self.hlay_file_cbox.addWidget(self.cbox_file_list[i])
+                self.cbox_file_list[i].show()
+        else:
+            for i in range(4, new - 1, -1):
+                self.hlay_file_cbox.removeWidget(self.cbox_file_list[i])
+                self.cbox_file_list[i].hide()
+        self.update_rule()
+
+    def update_rule(self):
+        name_dic = {'PID': 'illustId',
+                    '画廊名': 'illustTitle',
+                    '画师ID': 'userId',
+                    '画师名': 'userName',
+                    '创建日期': 'createDate'}
+        self.folder_rule = {i: name_dic[self.cbox_folder_list[i].currentText()] for i in range(self.sbox_folder.value())}
+        self.file_rule = {i: name_dic[self.cbox_file_list[i].currentText()] for i in range(self.sbox_file.value())}
+        self.previewer()
+
+    def previewer(self):
+        path = self.root_path
+        for layer in self.folder_rule.values():
+            path = os.path.join(path, layer)
+        all_name = [layer for layer in self.file_rule.values()]
+        name = '_'.join(all_name)
+        path = os.path.join(path, name + '.jpg')
+        self.ledit_prev.setText(path)
+
+    def keyPressEvent(self, k):
+        if k.key() == Qt.Key_Escape:
+            self.close()
+
+    def closeEvent(self, event):
+        self.closed.emit()
+
+
+class LayerSelector(QComboBox):
+    def __init__(self):
+        super().__init__()
+        self.addItems(['PID', '画廊名', '画师ID', '画师名', '创建日期'])
 
 
 class LineEditor(QLineEdit):
