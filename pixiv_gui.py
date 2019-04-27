@@ -7,7 +7,7 @@ import requests
 from PyQt5.QtCore import Qt, QSettings, QThread, pyqtSignal, QVariant
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QHeaderView, QTableWidgetItem,
                              QSplitter, QButtonGroup, QWidget, QGroupBox, QLineEdit, QPushButton, QCheckBox,
-                             QMessageBox, QTableWidget, QLabel, QAbstractItemView, QSpinBox)
+                             QMessageBox, QTableWidget, QLabel, QAbstractItemView, QSpinBox, QComboBox, QFileDialog)
 from PyQt5.QtGui import QBrush, QColor
 
 import globj
@@ -393,3 +393,158 @@ class MainWidget(QWidget):
         self.fetch_thread.except_signal.connect(globj.show_messagebox)
         self.fetch_thread.finished.connect(partial(self.set_disabled, False))
         self.fetch_thread.start()
+
+
+class DownloadSettingTab(QWidget):
+    _name_dic = {'PID': 'illustId',
+                 '画廊名': 'illustTitle',
+                 '画师ID': 'userId',
+                 '画师名': 'userName',
+                 '创建日期': 'createDate'}
+
+    def __init__(self, settings):
+        super().__init__()
+        self.settings = settings
+        self.root_path = None
+        self.folder_rule = None
+        self.file_rule = None
+
+        self.sbox_folder = QSpinBox()
+        self.sbox_folder.setMinimum(1)
+        self.sbox_folder.setMaximum(5)
+        self.sbox_file = QSpinBox()
+        self.sbox_file.setMinimum(1)
+        self.sbox_file.setMaximum(5)
+
+        self.cbox_folder_list = [LayerSelector() for i in range(5)]
+        self.cbox_file_list = [LayerSelector() for i in range(5)]
+        self.hlay_folder_cbox = QHBoxLayout()
+        self.hlay_file_cbox = QHBoxLayout()
+        for wid in self.cbox_folder_list:
+            wid.currentIndexChanged.connect(self.folder_rule_updater)
+            self.hlay_folder_cbox.addWidget(wid)
+        for wid in self.cbox_file_list:
+            wid.currentIndexChanged.connect(self.file_rule_updater)
+            self.hlay_file_cbox.addWidget(wid)
+
+        self.sbox_folder.valueChanged.connect(self.folder_cbox_updater)
+        self.sbox_file.valueChanged.connect(self.file_cbox_updater)
+
+        self.ledit_prev = globj.LineEditor()
+        self.ledit_prev.setReadOnly(True)
+        self.ledit_prev.setContextMenuPolicy(Qt.NoContextMenu)
+
+        self.restore()
+        self.init_ui()
+
+    def init_ui(self):
+        btn_root = QPushButton('浏览')
+        btn_root.clicked.connect(self.choose_dir)
+
+        glay_folder = QGridLayout()
+        glay_folder.addWidget(QLabel('根目录'), 0, 0, 1, 1)
+        glay_folder.addWidget(btn_root, 0, 1, 1, 2)
+        glay_folder.addWidget(QLabel('文件夹层级'), 1, 0, 1, 1)
+        glay_folder.addWidget(self.sbox_folder, 1, 1, 1, 2)
+
+        glay_file = QGridLayout()
+        glay_file.addWidget(QLabel('文件名层级'), 0, 0, 1, 1)
+        glay_file.addWidget(self.sbox_file, 0, 1, 1, 2)
+
+        vlay_pixiv = QVBoxLayout()
+        vlay_pixiv.addLayout(glay_folder)
+        vlay_pixiv.addLayout(self.hlay_folder_cbox)
+        vlay_pixiv.addLayout(glay_file)
+        vlay_pixiv.addLayout(self.hlay_file_cbox)
+        vlay_pixiv.addWidget(self.ledit_prev)
+        self.setLayout(vlay_pixiv)
+        self.setMinimumSize(self.sizeHint())
+        self.restore()
+
+    def choose_dir(self):
+        self.settings.beginGroup('DownloadSetting')
+        setting_root_path = self.settings.value('pixiv_root_path', os.path.abspath('.'))
+        self.root_path = QFileDialog.getExistingDirectory(self, '选择目录', setting_root_path)
+        self.settings.endGroup()
+        self.previewer()
+
+    def folder_cbox_updater(self, new):
+        now = self.hlay_folder_cbox.count()
+        if now < new:
+            for i in range(now, new):
+                self.hlay_folder_cbox.addWidget(self.cbox_folder_list[i])
+                self.cbox_folder_list[i].show()
+        else:
+            for i in range(4, new - 1, -1):
+                self.hlay_folder_cbox.removeWidget(self.cbox_folder_list[i])
+                self.cbox_folder_list[i].hide()
+        self.folder_rule = {i: self._name_dic[self.cbox_folder_list[i].currentText()]
+                            for i in range(new)}
+        self.previewer()
+
+    def file_cbox_updater(self, new):
+        now = self.hlay_file_cbox.count()
+        if now < new:
+            for i in range(now, new):
+                self.hlay_file_cbox.addWidget(self.cbox_file_list[i])
+                self.cbox_file_list[i].show()
+        else:
+            for i in range(4, new - 1, -1):
+                self.hlay_file_cbox.removeWidget(self.cbox_file_list[i])
+                self.cbox_file_list[i].hide()
+        self.file_rule = {i: self._name_dic[self.cbox_file_list[i].currentText()]
+                          for i in range(new)}
+        self.previewer()
+
+    def folder_rule_updater(self):
+        self.folder_rule = {i: self._name_dic[self.cbox_folder_list[i].currentText()]
+                            for i in range(self.sbox_folder.value())}
+        self.previewer()
+
+    def file_rule_updater(self):
+        self.file_rule = {i: self._name_dic[self.cbox_file_list[i].currentText()]
+                          for i in range(self.sbox_file.value())}
+        self.previewer()
+
+    def previewer(self):
+        path = self.root_path.replace('/', '\\')
+        for i in range(len(self.folder_rule)):
+            path = os.path.join(path, self.cbox_folder_list[i].currentText())
+        all_name = [self.cbox_file_list[i].currentText() for i in range(len(self.file_rule))]
+        name = '_'.join(all_name)
+        path = os.path.join(path, name + '.jpg')
+        self.ledit_prev.setText(path)
+
+    def store(self):
+        self.settings.beginGroup('DownloadSetting')
+        print(self.folder_rule, self.file_rule)
+        self.settings.setValue('pixiv_root_path', self.root_path)
+        self.settings.setValue('pixiv_folder_rule', self.folder_rule)
+        self.settings.setValue('pixiv_file_rule', self.file_rule)
+        self.settings.sync()
+        self.settings.endGroup()
+
+    def restore(self):
+        name_dic = {'illustId': 'PID',
+                    'illustTitle': '画廊名',
+                    'userId': '画师ID',
+                    'userName': '画师名',
+                    'createDate': '创建日期'}
+        self.settings.beginGroup('DownloadSetting')
+        self.root_path = self.settings.value('pixiv_root_path', os.path.abspath('.'))
+        self.folder_rule = folder_rule = self.settings.value('pixiv_folder_rule', {0: 'illustId'})
+        self.file_rule = file_rule = self.settings.value('pixiv_file_rule', {0: 'illustId'})
+        self.settings.endGroup()
+
+        self.sbox_folder.setValue(len(folder_rule))
+        self.sbox_file.setValue(len(file_rule))
+        for i in range(len(folder_rule)):
+            self.cbox_folder_list[i].setCurrentText(name_dic[folder_rule[i]])
+        for i in range(len(file_rule)):
+            self.cbox_file_list[i].setCurrentText(name_dic[file_rule[i]])
+
+
+class LayerSelector(QComboBox):
+    def __init__(self):
+        super().__init__()
+        self.addItems(['PID', '画廊名', '画师ID', '画师名', '创建日期'])
