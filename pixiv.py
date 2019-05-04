@@ -18,6 +18,7 @@ _LOGIN_URL = 'https://accounts.pixiv.net/'
 _USER_URL = 'https://www.pixiv.net/ajax/user/'
 _ILLUST_URL = 'https://www.pixiv.net/ajax/illust/'
 _ROOT_URL = 'https://www.pixiv.net/'
+_SAUCENAO_URL = 'https://saucenao.com/search.php'
 
 
 def login(se, proxy: dict, uid: str, pw: str):
@@ -190,6 +191,24 @@ def get_detail(se, pid: str, proxy: dict = None) -> dict:
         raise requests.Timeout('Timeout during getting illust detail.')
     except globj.ResponseError:
         raise
+
+
+def saucenao(path):
+    """Search pixiv id by picture, use sauceNAO engine."""
+    try:
+        with open(path, 'rb') as pic:
+            res = requests.post(_SAUCENAO_URL, files={'file': pic})
+        res_html = BeautifulSoup(res.text, 'lxml')
+        for item in res_html.find_all('td', class_='resulttablecontent'):
+            similarity = item.find('div', class_='resultsimilarityinfo').string
+            title = item.find('div', class_='resultcontentcolumn')
+            if float(similarity[:-1]) > 60.0 and title.strong.string == 'Pixiv ID: ':
+                return title.a.string
+        return None
+    except FileNotFoundError:
+        raise
+    except requests.Timeout:
+        raise requests.Timeout('Timeout during searching id by picture.')
 
 
 def path_name(item: dict, save_path: str, folder_rule: dict = None, file_rule: dict = None) -> tuple:
@@ -370,7 +389,11 @@ def clearer():
 
 
 if __name__ == '__main__':
-    pass
+    resu = saucenao('D:\\3C62750F419B758816569E11C2B9999B.jpg')
+    if resu:
+        print('id是: ', resu)
+    else:
+        print('没找到')
     # session = requests.session()
     # proxy = {'http': 'socks5://127.0.0.1:1080', 'https': 'socks5://127.0.0.1:1080'}
     # try:

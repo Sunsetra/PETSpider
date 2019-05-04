@@ -159,7 +159,7 @@ class FetchThread(QThread):
     fetch_success = pyqtSignal(list)
     except_signal = pyqtSignal(object, int, str, str)
 
-    def __init__(self, session, proxy, pid, uid, num):
+    def __init__(self, session, proxy: dict, pid: str, uid: str, num: int):
         super().__init__()
         self.session = session
         self.proxy = proxy
@@ -196,6 +196,36 @@ class FetchThread(QThread):
             self.fetch_success.emit(results)
 
 
+class SauceNAOThread(QThread):
+    search_success = pyqtSignal(list)
+    except_signal = pyqtSignal(object, int, str, str)
+
+    def __init__(self, session, proxy, path):
+        super().__init__()
+        self.session = session
+        self.proxy = proxy
+        self.path = path
+        self.fetch_thread = None
+
+    def run(self):
+        try:
+            pid = pixiv.saucenao(self.path)
+            if pid:
+                self.fetch_thread = FetchThread(self.session, self.proxy, pid, '', 0)
+                self.fetch_thread.fetch_success.connect(self.emit)
+                self.fetch_thread.except_signal.connect(globj.show_messagebox)
+                self.fetch_thread.start()
+            else:
+                self.except_signal.emit(self.parent(), QMessageBox.Information, '未找到', 'Pixiv不存在这张图或相似率过低。')
+        except FileNotFoundError:
+            self.except_signal.emit(self.parent(), QMessageBox.Critical, '错误', '文件不存在')
+        except requests.Timeout as e:
+            self.except_signal.emit(self.parent(), QMessageBox.Critical, '连接失败', '请检查网络或使用代理。\n' + repr(e))
+
+    def emit(self, arg):
+        self.search_success.emit(arg)
+
+
 class MainWidget(QWidget):
     logout = pyqtSignal(int)
 
@@ -205,6 +235,7 @@ class MainWidget(QWidget):
         self.info = info
         self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
         self.fetch_thread = None
+        self.sauce_thread = None
 
         self.ledit_pid = globj.LineEditor()
         self.ledit_uid = globj.LineEditor()
@@ -219,15 +250,14 @@ class MainWidget(QWidget):
         self.button_pid.setCheckable(True)
         self.button_uid = QPushButton('按UID搜索')
         self.button_uid.setCheckable(True)
-        self.button_loc = QPushButton('本地搜索')
-        self.button_loc.setCheckable(True)
         self.button_group = QButtonGroup()
         self.button_group.addButton(self.button_fo, 1)
         self.button_group.addButton(self.button_pid, 2)
         self.button_group.addButton(self.button_uid, 3)
-        self.button_group.addButton(self.button_loc, 4)
         self.button_group.buttonClicked[int].connect(self.change_stat)
 
+        self.button_snao = QPushButton('以图搜图')
+        self.button_snao.clicked.connect(self.search_pic)
         self.user_info = QLabel('{0}({1})'.format(self.info[1], self.info[0]))
         self.button_logout = QPushButton('退出登陆')
         self.button_logout.clicked.connect(partial(self.logout.emit, 0))
@@ -258,7 +288,7 @@ class MainWidget(QWidget):
         glay_lup.addWidget(self.button_fo)
         glay_lup.addWidget(self.button_pid)
         glay_lup.addWidget(self.button_uid)
-        glay_lup.addWidget(self.button_loc)
+        glay_lup.addWidget(self.button_snao)
 
         glay_ldown = QGridLayout()
         glay_ldown.addWidget(QLabel('画廊ID'), 0, 0, 1, 1)
@@ -303,8 +333,7 @@ class MainWidget(QWidget):
     def change_stat(self, bid):
         func = {1: self.new_stat,
                 2: self.pid_stat,
-                3: self.uid_stat,
-                4: self.loc_stat}
+                3: self.uid_stat}
         self.ledit_num.clear()
         self.ledit_pid.clear()
         self.ledit_uid.clear()
@@ -313,7 +342,6 @@ class MainWidget(QWidget):
     def new_stat(self):
         self.button_uid.setChecked(False)
         self.button_pid.setChecked(False)
-        self.button_loc.setChecked(False)
         self.button_fo.setChecked(True)
         self.ledit_uid.setDisabled(True)
         self.ledit_pid.setDisabled(True)
@@ -321,7 +349,6 @@ class MainWidget(QWidget):
 
     def pid_stat(self):
         self.button_fo.setChecked(False)
-        self.button_loc.setChecked(False)
         self.button_uid.setChecked(False)
         self.button_pid.setChecked(True)
         self.ledit_uid.setDisabled(True)
@@ -330,20 +357,10 @@ class MainWidget(QWidget):
 
     def uid_stat(self):
         self.button_fo.setChecked(False)
-        self.button_loc.setChecked(False)
         self.button_pid.setChecked(False)
         self.button_uid.setChecked(True)
         self.ledit_pid.setDisabled(True)
         self.ledit_uid.setDisabled(False)
-        self.ledit_num.setDisabled(False)
-
-    def loc_stat(self):
-        self.button_pid.setChecked(False)
-        self.button_uid.setChecked(False)
-        self.button_fo.setChecked(False)
-        self.button_loc.setChecked(True)
-        self.ledit_uid.setDisabled(False)
-        self.ledit_pid.setDisabled(False)
         self.ledit_num.setDisabled(False)
 
     def tabulate(self, items):
@@ -394,6 +411,17 @@ class MainWidget(QWidget):
         self.fetch_thread.finished.connect(partial(self.set_disabled, False))
         self.fetch_thread.start()
 
+    def search_pic(self):
+        # TODO: Add editable similarity in the setting.
+        self.button_get.setDisabled(True)
+        path = QFileDialog.getOpenFileName(self, '选择图片', os.path.abspath('.'), '图片文件(*.jpg *.png)')
+        if path[0]:
+            self.sauce_thread = SauceNAOThread(self.glovar.session, self.glovar.proxy, path[0])
+            self.sauce_thread.search_success.connect(self.tabulate)
+            self.sauce_thread.except_signal.connect(globj.show_messagebox)
+            self.sauce_thread.finished.connect(partial(self.button_get.setDisabled, False))
+            self.sauce_thread.start()
+
 
 class DownloadSettingTab(QWidget):
     _name_dic = {'PID': 'illustId',
@@ -412,14 +440,18 @@ class DownloadSettingTab(QWidget):
         self.sbox_folder = QSpinBox()
         self.sbox_folder.setMinimum(1)
         self.sbox_folder.setMaximum(5)
+        self.sbox_folder.setContextMenuPolicy(Qt.NoContextMenu)
+        self.sbox_folder.valueChanged.connect(self.folder_cbox_updater)
         self.sbox_file = QSpinBox()
         self.sbox_file.setMinimum(1)
         self.sbox_file.setMaximum(5)
+        self.sbox_file.setContextMenuPolicy(Qt.NoContextMenu)
+        self.sbox_file.valueChanged.connect(self.file_cbox_updater)
 
-        self.cbox_folder_list = [LayerSelector() for i in range(5)]
-        self.cbox_file_list = [LayerSelector() for i in range(5)]
         self.hlay_folder_cbox = QHBoxLayout()
         self.hlay_file_cbox = QHBoxLayout()
+        self.cbox_folder_list = [LayerSelector() for i in range(5)]
+        self.cbox_file_list = [LayerSelector() for i in range(5)]
         for wid in self.cbox_folder_list:
             wid.currentIndexChanged.connect(self.folder_rule_updater)
             self.hlay_folder_cbox.addWidget(wid)
@@ -427,14 +459,13 @@ class DownloadSettingTab(QWidget):
             wid.currentIndexChanged.connect(self.file_rule_updater)
             self.hlay_file_cbox.addWidget(wid)
 
-        self.sbox_folder.valueChanged.connect(self.folder_cbox_updater)
-        self.sbox_file.valueChanged.connect(self.file_cbox_updater)
-
         self.ledit_prev = globj.LineEditor()
         self.ledit_prev.setReadOnly(True)
         self.ledit_prev.setContextMenuPolicy(Qt.NoContextMenu)
 
         self.restore()
+        self.folder_cbox_updater(1)
+        self.file_cbox_updater(1)
         self.init_ui()
 
     def init_ui(self):
@@ -459,14 +490,15 @@ class DownloadSettingTab(QWidget):
         vlay_pixiv.addWidget(self.ledit_prev)
         self.setLayout(vlay_pixiv)
         self.setMinimumSize(self.sizeHint())
-        self.restore()
 
     def choose_dir(self):
         self.settings.beginGroup('DownloadSetting')
         setting_root_path = self.settings.value('pixiv_root_path', os.path.abspath('.'))
-        self.root_path = QFileDialog.getExistingDirectory(self, '选择目录', setting_root_path)
+        root_path = QFileDialog.getExistingDirectory(self, '选择目录', setting_root_path)
         self.settings.endGroup()
-        self.previewer()
+        if root_path:  # When click Cancel, root_path is None
+            self.root_path = root_path
+            self.previewer()
 
     def folder_cbox_updater(self, new):
         now = self.hlay_folder_cbox.count()
@@ -517,7 +549,6 @@ class DownloadSettingTab(QWidget):
 
     def store(self):
         self.settings.beginGroup('DownloadSetting')
-        print(self.folder_rule, self.file_rule)
         self.settings.setValue('pixiv_root_path', self.root_path)
         self.settings.setValue('pixiv_folder_rule', self.folder_rule)
         self.settings.setValue('pixiv_file_rule', self.file_rule)
@@ -535,13 +566,18 @@ class DownloadSettingTab(QWidget):
         self.folder_rule = folder_rule = self.settings.value('pixiv_folder_rule', {0: 'illustId'})
         self.file_rule = file_rule = self.settings.value('pixiv_file_rule', {0: 'illustId'})
         self.settings.endGroup()
-
         self.sbox_folder.setValue(len(folder_rule))
         self.sbox_file.setValue(len(file_rule))
-        for i in range(len(folder_rule)):
-            self.cbox_folder_list[i].setCurrentText(name_dic[folder_rule[i]])
-        for i in range(len(file_rule)):
-            self.cbox_file_list[i].setCurrentText(name_dic[file_rule[i]])
+        for i in range(5):
+            try:
+                self.cbox_folder_list[i].setCurrentText(name_dic[folder_rule[i]])
+            except KeyError:
+                self.cbox_folder_list[i].setCurrentText('PID')
+            try:
+                self.cbox_file_list[i].setCurrentText(name_dic[file_rule[i]])
+            except KeyError:
+                self.cbox_file_list[i].setCurrentText('PID')
+        self.previewer()  # Necessary when select root path without clicking Confirm
 
 
 class LayerSelector(QComboBox):

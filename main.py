@@ -32,9 +32,9 @@ class MainWindow(QMainWindow):
         self.pixiv_main = None  # Pixiv main page
 
         self.ehentai_wid = None
-        self.ehentai_var = self.init_var()
+        self.ehentai_var = None
         self.twitter_wid = None
-        self.twitter_var = self.init_var()
+        self.twitter_var = None
 
         self.tab_widget = QTabWidget()  # Main widget of main window
         self.tab_widget.setTabShape(QTabWidget.Triangular)

@@ -115,7 +115,8 @@ class NetSettingDialog(QWidget):
         vlay_proxy.addLayout(hlay_proxy)
         self.setLayout(vlay_proxy)
 
-        self.setFixedSize(self.sizeHint())
+        self.setMinimumWidth(self.sizeHint().width())
+        self.setFixedHeight(self.sizeHint().height())
         self.setWindowTitle('网络设置')
 
     def store(self):
@@ -160,7 +161,7 @@ class NetSettingDialog(QWidget):
 
 class DownloadSettingDialog(QWidget):
     """DownloadSetting dialog class."""
-    closed = pyqtSignal()
+    # closed = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -176,7 +177,7 @@ class DownloadSettingDialog(QWidget):
     def init_ui(self):
         main_wid = QTabWidget()
         main_wid.addTab(self.pixiv_tab, 'Pixiv')
-        main_wid.setMinimumSize(self.pixiv_tab.size())
+        main_wid.setMinimumWidth(self.pixiv_tab.size().width())
 
         btn_ok = QPushButton('确定', self)
         btn_canc = QPushButton('取消', self)
@@ -185,8 +186,8 @@ class DownloadSettingDialog(QWidget):
 
         hlay_btn = QHBoxLayout()  # Confirm and cancel button
         hlay_btn.addStretch(1)
-        hlay_btn.addWidget(btn_ok)
-        hlay_btn.addWidget(btn_canc)
+        hlay_btn.addWidget(btn_ok, alignment=Qt.AlignTop)
+        hlay_btn.addWidget(btn_canc, alignment=Qt.AlignTop)
         hlay_btn.addStretch(1)
 
         vlay = QVBoxLayout()
@@ -194,7 +195,8 @@ class DownloadSettingDialog(QWidget):
         vlay.addLayout(hlay_btn)
 
         self.setLayout(vlay)
-        self.setFixedSize(self.sizeHint())
+        self.setMinimumWidth(self.sizeHint().width())
+        self.setFixedHeight(self.sizeHint().height())
         self.setWindowTitle('下载设置')
 
     def store(self):
@@ -207,7 +209,7 @@ class DownloadSettingDialog(QWidget):
 
     def closeEvent(self, event):
         self.pixiv_tab.restore()
-        self.closed.emit()
+        # self.closed.emit()
 
 
 class LineEditor(QLineEdit):
