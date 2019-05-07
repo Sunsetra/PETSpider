@@ -40,10 +40,10 @@ class MainWindow(QMainWindow):
         self.tab_widget.setTabShape(QTabWidget.Triangular)
         self.setCentralWidget(self.tab_widget)
 
-        self.net_setting = globj.NetSettingDialog()
-        self.net_setting.closed.connect(self.net_setting_checker)
-        self.dl_setting = globj.DownloadSettingDialog()
-        # self.dl_setting.closed.connect(self.dl_setting_checker)
+        self.misc_setting = globj.MiscSettingDialog()
+        self.misc_setting.closed.connect(self.net_setting_checker)
+        self.rule_setting = globj.SaveRuleDialog()
+        # self.rule_setting.closed.connect(self.dl_setting_checker)
 
         self.init_ui()
 
@@ -56,12 +56,12 @@ class MainWindow(QMainWindow):
         file_menu.addAction(act_exit)
 
         setting_menu = menu_bar.addMenu('设置(&S)')
-        net_setting = QAction('网络设置(&N)', self)
-        dl_setting = QAction('下载设置(&D)', self)
-        setting_menu.addAction(net_setting)
-        setting_menu.addAction(dl_setting)
-        net_setting.triggered.connect(self.net_setting_dialog)
-        dl_setting.triggered.connect(self.dl_setting_dialog)
+        misc_setting = QAction('首选项(&P)', self)
+        rule_setting = QAction('保存规则(&R)', self)
+        setting_menu.addAction(misc_setting)
+        setting_menu.addAction(rule_setting)
+        misc_setting.triggered.connect(self.misc_setting_dialog)
+        rule_setting.triggered.connect(self.rule_setting_dialog)
 
         self.tab_login(0)
 
@@ -81,7 +81,7 @@ class MainWindow(QMainWindow):
         adp = HTTPAdapter(max_retries=retries)
         session.mount('http://', adp)
         session.mount('https://', adp)
-        self.settings.beginGroup('NetSetting')
+        self.settings.beginGroup('MiscSetting')
         proxy = self.settings.value('proxy', {})
         self.settings.endGroup()
         return globj.GlobalVar(session, proxy)
@@ -105,13 +105,13 @@ class MainWindow(QMainWindow):
             self.tab_widget.removeTab(index)
             self.tab_widget.insertTab(0, self.pixiv_login, 'Pixiv')
 
-    def net_setting_dialog(self):
-        self.net_setting.move(self.x() + (self.width() - self.net_setting.sizeHint().width()) / 2,
-                              self.y() + (self.height() - self.net_setting.sizeHint().height()) / 2)
-        self.net_setting.show()
+    def misc_setting_dialog(self):
+        self.misc_setting.move(self.x() + (self.width() - self.misc_setting.sizeHint().width()) / 2,
+                               self.y() + (self.height() - self.misc_setting.sizeHint().height()) / 2)
+        self.misc_setting.show()
 
     def net_setting_checker(self):
-        self.settings.beginGroup('NetSetting')
+        self.settings.beginGroup('MiscSetting')
         if int(self.settings.value('pixiv_proxy', False)):
             self.pixiv_var.proxy = self.settings.value('proxy', {})
         else:
@@ -119,10 +119,10 @@ class MainWindow(QMainWindow):
         # There also need ehentai and twitter proxy changer later
         self.settings.endGroup()
 
-    def dl_setting_dialog(self):
-        self.dl_setting.move(self.x() + (self.width() - self.dl_setting.sizeHint().width()) / 2,
-                             self.y() + (self.height() - self.dl_setting.sizeHint().height()) / 2)
-        self.dl_setting.show()
+    def rule_setting_dialog(self):
+        self.rule_setting.move(self.x() + (self.width() - self.rule_setting.sizeHint().width()) / 2,
+                               self.y() + (self.height() - self.rule_setting.sizeHint().height()) / 2)
+        self.rule_setting.show()
 
     # def dl_setting_checker(self):
     #     self.settings.beginGroup('DownloadSetting')

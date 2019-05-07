@@ -193,7 +193,7 @@ def get_detail(se, pid: str, proxy: dict = None) -> dict:
         raise
 
 
-def saucenao(path):
+def saucenao(path: str, sim: float):
     """Search pixiv id by picture, use sauceNAO engine."""
     try:
         with open(path, 'rb') as pic:
@@ -202,7 +202,7 @@ def saucenao(path):
         for item in res_html.find_all('td', class_='resulttablecontent'):
             similarity = item.find('div', class_='resultsimilarityinfo').string
             title = item.find('div', class_='resultcontentcolumn')
-            if float(similarity[:-1]) > 60.0 and title.strong.string == 'Pixiv ID: ':
+            if float(similarity[:-1]) >= sim and title.strong.string == 'Pixiv ID: ':
                 return title.a.string
         return None
     except FileNotFoundError:

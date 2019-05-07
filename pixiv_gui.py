@@ -5,10 +5,10 @@ from functools import partial
 
 import requests
 from PyQt5.QtCore import Qt, QSettings, QThread, pyqtSignal, QVariant
+from PyQt5.QtGui import QBrush, QColor
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QHeaderView, QTableWidgetItem,
                              QSplitter, QButtonGroup, QWidget, QGroupBox, QLineEdit, QPushButton, QCheckBox,
                              QMessageBox, QTableWidget, QLabel, QAbstractItemView, QSpinBox, QComboBox, QFileDialog)
-from PyQt5.QtGui import QBrush, QColor
 
 import globj
 import pixiv
@@ -29,6 +29,7 @@ class LoginWidget(QWidget):
         self.ledit_pw.setEchoMode(QLineEdit.Password)
         self.cbox_cookie = QCheckBox('保存登陆状态')
         self.button_ok = QPushButton('登陆')
+        self.button_ok.setDefault(True)
         self.button_ok.clicked.connect(self.login)
         self.login_thread = None
         self.verify_thread = None
@@ -206,17 +207,22 @@ class SauceNAOThread(QThread):
         self.proxy = proxy
         self.path = path
         self.fetch_thread = None
+        self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
 
     def run(self):
+        self.settings.beginGroup('MiscSetting')
+        similarity = float(self.settings.value('similarity', 60.0))
+        self.settings.endGroup()
         try:
-            pid = pixiv.saucenao(self.path)
+            pid = pixiv.saucenao(self.path, similarity)
             if pid:
                 self.fetch_thread = FetchThread(self.session, self.proxy, pid, '', 0)
                 self.fetch_thread.fetch_success.connect(self.emit)
                 self.fetch_thread.except_signal.connect(globj.show_messagebox)
                 self.fetch_thread.start()
             else:
-                self.except_signal.emit(self.parent(), QMessageBox.Information, '未找到', 'Pixiv不存在这张图或相似率过低。')
+                self.except_signal.emit(self.parent(), QMessageBox.Information,
+                                        '未找到', 'Pixiv不存在这张图或相似率过低，请尝试在首选项中降低相似度阈值。')
         except FileNotFoundError:
             self.except_signal.emit(self.parent(), QMessageBox.Critical, '错误', '文件不存在')
         except requests.Timeout as e:
@@ -412,7 +418,7 @@ class MainWidget(QWidget):
         self.fetch_thread.start()
 
     def search_pic(self):
-        # TODO: Add editable similarity in the setting.
+        self.button_snao.setDisabled(True)
         self.button_get.setDisabled(True)
         path = QFileDialog.getOpenFileName(self, '选择图片', os.path.abspath('.'), '图片文件(*.jpg *.png)')
         if path[0]:
@@ -423,7 +429,7 @@ class MainWidget(QWidget):
             self.sauce_thread.start()
 
 
-class DownloadSettingTab(QWidget):
+class SaveRuleSettingTab(QWidget):
     _name_dic = {'PID': 'illustId',
                  '画廊名': 'illustTitle',
                  '画师ID': 'userId',
@@ -492,7 +498,7 @@ class DownloadSettingTab(QWidget):
         self.setMinimumSize(self.sizeHint())
 
     def choose_dir(self):
-        self.settings.beginGroup('DownloadSetting')
+        self.settings.beginGroup('RuleSetting')
         setting_root_path = self.settings.value('pixiv_root_path', os.path.abspath('.'))
         root_path = QFileDialog.getExistingDirectory(self, '选择目录', setting_root_path)
         self.settings.endGroup()
@@ -548,7 +554,7 @@ class DownloadSettingTab(QWidget):
         self.ledit_prev.setText(path)
 
     def store(self):
-        self.settings.beginGroup('DownloadSetting')
+        self.settings.beginGroup('RuleSetting')
         self.settings.setValue('pixiv_root_path', self.root_path)
         self.settings.setValue('pixiv_folder_rule', self.folder_rule)
         self.settings.setValue('pixiv_file_rule', self.file_rule)
@@ -561,7 +567,7 @@ class DownloadSettingTab(QWidget):
                     'userId': '画师ID',
                     'userName': '画师名',
                     'createDate': '创建日期'}
-        self.settings.beginGroup('DownloadSetting')
+        self.settings.beginGroup('RuleSetting')
         self.root_path = self.settings.value('pixiv_root_path', os.path.abspath('.'))
         self.folder_rule = folder_rule = self.settings.value('pixiv_folder_rule', {0: 'illustId'})
         self.file_rule = file_rule = self.settings.value('pixiv_file_rule', {0: 'illustId'})
