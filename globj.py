@@ -2,13 +2,13 @@
 """Global objects."""
 import os
 import platform
-import random
 import re
 
 from PyQt5.QtCore import Qt, QSettings, pyqtSignal
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QFormLayout, QHBoxLayout, QVBoxLayout, QGridLayout, QMenu
-from PyQt5.QtWidgets import QWidget, QLineEdit, QGroupBox, QPushButton, QCheckBox, QMessageBox, QTabWidget, QDoubleSpinBox
+from PyQt5.QtWidgets import (QWidget, QLineEdit, QGroupBox, QPushButton, QCheckBox,
+                             QMessageBox, QTabWidget, QDoubleSpinBox)
 
 import pixiv_gui
 
@@ -18,18 +18,15 @@ _PLATFORM = platform.system()
 
 
 class GlobalVar(object):
+    user_agent = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:65.0) Gecko/20100101 Firefox/65.0',
+                  ('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) '
+                   'Chrome/73.0.3683.86 Safari/537.36'),
+                  ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+                   'Chrome/64.0.3282.140 Safari/537.36 Edge/18.17763'))
+
     def __init__(self, session, proxy: dict):
-        self._user_agent = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:65.0) Gecko/20100101 Firefox/65.0',
-                            ('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) '
-                             'Chrome/73.0.3683.86 Safari/537.36'),
-                            ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
-                             'Chrome/64.0.3282.140 Safari/537.36 Edge/18.17763'))
         self._session = session
         self._proxy = proxy
-
-    @property
-    def user_agent(self):  # Return random user agent
-        return self._user_agent[random.randint(0, 2)]
 
     @property
     def session(self):
@@ -140,13 +137,13 @@ class MiscSettingDialog(QWidget):
         self.setWindowTitle('首选项')
 
     def clear_cookies(self):
+        self.btn_cookies.setDisabled(True)
         self.settings.beginGroup('Cookies')
         self.settings.setValue('pixiv', '')
         self.settings.setValue('ehentai', '')
         self.settings.setValue('twitter', '')
         self.settings.sync()
         self.settings.endGroup()
-        self.btn_cookies.setDisabled(True)
         self.btn_cookies.setText('清除完成')
 
     def store(self):

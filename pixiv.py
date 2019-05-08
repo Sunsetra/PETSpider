@@ -264,7 +264,7 @@ def download_pic(se, proxy: dict, item: dict, path: tuple):
             if not os.path.exists(file_path):  # If file exists, skip it
                 print('downloading', file_path)
                 header = {'Referer': referer,
-                          'User-Agent': globj.GlobalVar.user_agent}
+                          'User-Agent': globj.GlobalVar.user_agent[random.randint(0, 2)]}
                 se.headers.update(header)
                 try:
                     with se.get(real_url,
@@ -389,11 +389,12 @@ def clearer():
 
 
 if __name__ == '__main__':
-    resu = saucenao('D:\\3C62750F419B758816569E11C2B9999B.jpg')
-    if resu:
-        print('id是: ', resu)
-    else:
-        print('没找到')
+    pass
+    # resu = saucenao('D:\\3C62750F419B758816569E11C2B9999B.jpg')
+    # if resu:
+    #     print('id是: ', resu)
+    # else:
+    #     print('没找到')
     # session = requests.session()
     # proxy = {'http': 'socks5://127.0.0.1:1080', 'https': 'socks5://127.0.0.1:1080'}
     # try:

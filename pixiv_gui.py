@@ -4,7 +4,7 @@ import os
 from functools import partial
 
 import requests
-from PyQt5.QtCore import Qt, QSettings, QThread, pyqtSignal, QVariant
+from PyQt5.QtCore import Qt, QSettings, QThread, pyqtSignal, QVariant, QRunnable, QObject, QThreadPool
 from PyQt5.QtGui import QBrush, QColor
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QHeaderView, QTableWidgetItem,
                              QSplitter, QButtonGroup, QWidget, QGroupBox, QLineEdit, QPushButton, QCheckBox,
@@ -28,9 +28,9 @@ class LoginWidget(QWidget):
         self.ledit_pw.setContextMenuPolicy(Qt.NoContextMenu)
         self.ledit_pw.setEchoMode(QLineEdit.Password)
         self.cbox_cookie = QCheckBox('保存登陆状态')
-        self.button_ok = QPushButton('登陆')
-        self.button_ok.setDefault(True)
-        self.button_ok.clicked.connect(self.login)
+        self.btn_ok = QPushButton('登陆')
+        self.btn_ok.setDefault(True)
+        self.btn_ok.clicked.connect(self.login)
         self.login_thread = None
         self.verify_thread = None
 
@@ -40,7 +40,7 @@ class LoginWidget(QWidget):
         self.ledit_pw.setDisabled(status)
         self.ledit_un.setDisabled(status)
         self.cbox_cookie.setDisabled(status)
-        self.button_ok.setDisabled(status)
+        self.btn_ok.setDisabled(status)
 
     def init_ui(self):
         self.settings.beginGroup('Cookies')
@@ -57,7 +57,7 @@ class LoginWidget(QWidget):
 
         vlay_ok = QVBoxLayout()  # GroupBox layout
         vlay_ok.addLayout(flay_input)
-        vlay_ok.addWidget(self.button_ok, alignment=Qt.AlignHCenter)
+        vlay_ok.addWidget(self.btn_ok, alignment=Qt.AlignHCenter)
         gbox_login = QGroupBox()
         gbox_login.setLayout(vlay_ok)
         gbox_login.setFixedSize(gbox_login.sizeHint())
@@ -232,16 +232,41 @@ class SauceNAOThread(QThread):
         self.search_success.emit(arg)
 
 
+class DownloadSignals(QObject):
+    download_success = pyqtSignal()
+    except_signal = pyqtSignal(object, int, str, str)
+
+
+class DownloadThread(QRunnable):
+    def __init__(self, session, proxy, info, path):
+        super().__init__()
+        self.session = session
+        self.proxy = proxy
+        self.info = info
+        self.path = path
+        self.signals = DownloadSignals()
+
+    def run(self):
+        try:
+            pixiv.download_pic(self.session, self.proxy, self.info, self.path)
+        except (requests.exceptions.ProxyError,
+                requests.exceptions.Timeout,
+                requests.exceptions.ConnectionError) as e:
+            self.signals.except_signal.emit(self.parent(), QMessageBox.Warning, '连接失败', '请检查网络或使用代理。\n' + repr(e))
+        else:
+            self.signals.download_success.emit()
+
+
 class MainWidget(QWidget):
     logout = pyqtSignal(int)
 
     def __init__(self, glovar, info):
         super().__init__()
         self.glovar = glovar
-        self.info = info
         self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
         self.fetch_thread = None
         self.sauce_thread = None
+        self.thread_pool = QThreadPool()
 
         self.ledit_pid = globj.LineEditor()
         self.ledit_uid = globj.LineEditor()
@@ -250,26 +275,27 @@ class MainWidget(QWidget):
         self.ledit_num.setMaximum(999)
         self.ledit_num.clear()
 
-        self.button_fo = QPushButton('关注的更新')
-        self.button_fo.setCheckable(True)
-        self.button_pid = QPushButton('按PID搜索')
-        self.button_pid.setCheckable(True)
-        self.button_uid = QPushButton('按UID搜索')
-        self.button_uid.setCheckable(True)
-        self.button_group = QButtonGroup()
-        self.button_group.addButton(self.button_fo, 1)
-        self.button_group.addButton(self.button_pid, 2)
-        self.button_group.addButton(self.button_uid, 3)
-        self.button_group.buttonClicked[int].connect(self.change_stat)
+        self.btn_fo = QPushButton('关注的更新')
+        self.btn_fo.setCheckable(True)
+        self.btn_pid = QPushButton('按PID搜索')
+        self.btn_pid.setCheckable(True)
+        self.btn_uid = QPushButton('按UID搜索')
+        self.btn_uid.setCheckable(True)
+        self.btn_group = QButtonGroup()
+        self.btn_group.addButton(self.btn_fo, 1)
+        self.btn_group.addButton(self.btn_pid, 2)
+        self.btn_group.addButton(self.btn_uid, 3)
+        self.btn_group.buttonClicked[int].connect(self.change_stat)
 
-        self.button_snao = QPushButton('以图搜图')
-        self.button_snao.clicked.connect(self.search_pic)
-        self.user_info = QLabel('{0}({1})'.format(self.info[1], self.info[0]))
-        self.button_logout = QPushButton('退出登陆')
-        self.button_logout.clicked.connect(partial(self.logout.emit, 0))
-        self.button_get = QPushButton('获取信息')
-        self.button_get.clicked.connect(self.fetch_new)
-        self.button_dl = QPushButton('下载')
+        self.btn_snao = QPushButton('以图搜图')
+        self.btn_snao.clicked.connect(self.search_pic)
+        self.user_info = QLabel('{0}({1})'.format(info[1], info[0]))
+        self.btn_logout = QPushButton('退出登陆')
+        self.btn_logout.clicked.connect(partial(self.logout.emit, 0))
+        self.btn_get = QPushButton('获取信息')
+        self.btn_get.clicked.connect(self.fetch_new)
+        self.btn_dl = QPushButton('下载')
+        self.btn_dl.clicked.connect(self.download)
 
         self.table_viewer = QTableWidget()  # Detail viewer of fetched info
         self.table_viewer.setWordWrap(False)
@@ -291,10 +317,10 @@ class MainWidget(QWidget):
 
     def init_ui(self):
         glay_lup = QHBoxLayout()
-        glay_lup.addWidget(self.button_fo)
-        glay_lup.addWidget(self.button_pid)
-        glay_lup.addWidget(self.button_uid)
-        glay_lup.addWidget(self.button_snao)
+        glay_lup.addWidget(self.btn_fo)
+        glay_lup.addWidget(self.btn_pid)
+        glay_lup.addWidget(self.btn_uid)
+        glay_lup.addWidget(self.btn_snao)
 
         glay_ldown = QGridLayout()
         glay_ldown.addWidget(QLabel('画廊ID'), 0, 0, 1, 1)
@@ -314,9 +340,9 @@ class MainWidget(QWidget):
 
         vlay_right = QVBoxLayout()
         vlay_right.addWidget(self.user_info)
-        vlay_right.addWidget(self.button_logout)
-        vlay_right.addWidget(self.button_get)
-        vlay_right.addWidget(self.button_dl)
+        vlay_right.addWidget(self.btn_logout)
+        vlay_right.addWidget(self.btn_get)
+        vlay_right.addWidget(self.btn_dl)
         right_wid = QWidget()
         right_wid.setLayout(vlay_right)
 
@@ -332,9 +358,9 @@ class MainWidget(QWidget):
         self.setLayout(vlay_main)
 
     def set_disabled(self, status: bool):
-        self.button_get.setDisabled(status)
-        self.button_dl.setDisabled(status)
-        self.button_logout.setDisabled(status)
+        self.btn_get.setDisabled(status)
+        self.btn_dl.setDisabled(status)
+        self.btn_logout.setDisabled(status)
 
     def change_stat(self, bid):
         func = {1: self.new_stat,
@@ -346,25 +372,25 @@ class MainWidget(QWidget):
         func[bid]()
 
     def new_stat(self):
-        self.button_uid.setChecked(False)
-        self.button_pid.setChecked(False)
-        self.button_fo.setChecked(True)
+        self.btn_uid.setChecked(False)
+        self.btn_pid.setChecked(False)
+        self.btn_fo.setChecked(True)
         self.ledit_uid.setDisabled(True)
         self.ledit_pid.setDisabled(True)
         self.ledit_num.setDisabled(False)
 
     def pid_stat(self):
-        self.button_fo.setChecked(False)
-        self.button_uid.setChecked(False)
-        self.button_pid.setChecked(True)
+        self.btn_fo.setChecked(False)
+        self.btn_uid.setChecked(False)
+        self.btn_pid.setChecked(True)
         self.ledit_uid.setDisabled(True)
         self.ledit_num.setDisabled(True)
         self.ledit_pid.setDisabled(False)
 
     def uid_stat(self):
-        self.button_fo.setChecked(False)
-        self.button_pid.setChecked(False)
-        self.button_uid.setChecked(True)
+        self.btn_fo.setChecked(False)
+        self.btn_pid.setChecked(False)
+        self.btn_uid.setChecked(True)
         self.ledit_pid.setDisabled(True)
         self.ledit_uid.setDisabled(False)
         self.ledit_num.setDisabled(False)
@@ -405,7 +431,7 @@ class MainWidget(QWidget):
         self.table_viewer.setSortingEnabled(True)
 
     def fetch_new(self):
-        """When fetch info button clicked, call get_detail function in pixiv.py."""
+        """When fetch info btn clicked, call get_detail function in pixiv.py."""
         self.set_disabled(True)
         pid = self.ledit_pid.text()
         uid = self.ledit_uid.text()
@@ -417,15 +443,31 @@ class MainWidget(QWidget):
         self.fetch_thread.finished.connect(partial(self.set_disabled, False))
         self.fetch_thread.start()
 
+    def download(self):
+        items = self.table_viewer.selectedItems()
+        self.settings.beginGroup('RuleSetting')
+        root_path = self.settings.value('pixiv_root_path', os.path.abspath('.'))
+        folder_rule = self.settings.value('pixiv_folder_rule', {0: 'illustId'})
+        file_rule = self.settings.value('pixiv_file_rule', {0: 'illustId'})
+        self.settings.endGroup()
+        for i in range(len(items) // 6):
+            info = pixiv.fetcher(items[i * 6].text())
+            path = pixiv.path_name(info, root_path, folder_rule, file_rule)
+            thread = DownloadThread(self.glovar.session, self.glovar.proxy, info, path)
+            thread.signals.except_signal.connect(globj.show_messagebox)
+            thread.signals.download_success.connect(partial(print, ('下载完成:', items[i * 6].text())))
+            self.thread_pool.start(thread)
+
     def search_pic(self):
-        self.button_snao.setDisabled(True)
-        self.button_get.setDisabled(True)
         path = QFileDialog.getOpenFileName(self, '选择图片', os.path.abspath('.'), '图片文件(*.jpg *.png)')
         if path[0]:
+            self.btn_snao.setDisabled(True)
+            self.btn_get.setDisabled(True)
+            self.btn_dl.setDisabled(True)
             self.sauce_thread = SauceNAOThread(self.glovar.session, self.glovar.proxy, path[0])
             self.sauce_thread.search_success.connect(self.tabulate)
             self.sauce_thread.except_signal.connect(globj.show_messagebox)
-            self.sauce_thread.finished.connect(partial(self.button_get.setDisabled, False))
+            self.sauce_thread.finished.connect(partial(self.btn_get.setDisabled, False))
             self.sauce_thread.start()
 
 
