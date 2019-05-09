@@ -8,7 +8,7 @@ from PyQt5.QtCore import Qt, QSettings, pyqtSignal
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import QFormLayout, QHBoxLayout, QVBoxLayout, QGridLayout, QMenu
 from PyQt5.QtWidgets import (QWidget, QLineEdit, QGroupBox, QPushButton, QCheckBox,
-                             QMessageBox, QTabWidget, QDoubleSpinBox)
+                             QMessageBox, QTabWidget, QDoubleSpinBox, QSpinBox)
 
 import pixiv_gui
 
@@ -64,6 +64,10 @@ class MiscSettingDialog(QWidget):
         self.sbox_simi.setSingleStep(0.5)
         self.sbox_simi.setDecimals(2)
         self.sbox_simi.setSuffix(' %')
+        self.sbox_dlcount = QSpinBox()
+        self.sbox_dlcount.setContextMenuPolicy(Qt.NoContextMenu)
+        self.sbox_dlcount.setRange(1, 10)
+        self.sbox_dlcount.setWrapping(True)
 
         self.setWindowModality(Qt.ApplicationModal)
         self.setWindowFlags(Qt.CustomizeWindowHint | Qt.WindowCloseButtonHint)
@@ -77,6 +81,7 @@ class MiscSettingDialog(QWidget):
         setting_twitter_proxy = int(self.settings.value('twitter_proxy', False))
         setting_proxy = self.settings.value('proxy', {'http': '', 'https': ''})
         setting_similarity = float(self.settings.value('similarity', 60.0))
+        setting_dlcount = int(self.settings.value('dl_sametime', 3))
         self.settings.endGroup()
 
         self.cbox_pixiv.setChecked(setting_pixiv_proxy)
@@ -87,6 +92,7 @@ class MiscSettingDialog(QWidget):
         self.ledit_http.setText(setting_proxy['http'])
         self.ledit_https.setText(setting_proxy['https'])
         self.sbox_simi.setValue(setting_similarity)
+        self.sbox_dlcount.setValue(setting_dlcount)
 
         btn_ok = QPushButton('确定', self)
         btn_ok.setDefault(True)
@@ -115,6 +121,7 @@ class MiscSettingDialog(QWidget):
         flay_misc = QFormLayout()
         flay_misc.addRow('登陆信息', self.btn_cookies)
         flay_misc.addRow('图片相似度', self.sbox_simi)
+        flay_misc.addRow('同时下载数', self.sbox_dlcount)
         gbox_misc.setLayout(flay_misc)
 
         hlay_btn = QHBoxLayout()  # Confirm and cancel button
@@ -166,6 +173,7 @@ class MiscSettingDialog(QWidget):
             msg_box.exec()
         self.settings.beginGroup('MiscSetting')
         self.settings.setValue('similarity', self.sbox_simi.value())
+        self.settings.setValue('dl_sametime', self.sbox_dlcount.value())
         self.settings.sync()
         self.settings.endGroup()
         self.close()
@@ -181,6 +189,7 @@ class MiscSettingDialog(QWidget):
         setting_twitter_proxy = int(self.settings.value('twitter_proxy', False))
         setting_proxy = self.settings.value('proxy', {'http': '', 'https': ''})
         setting_similarity = float(self.settings.value('similarity', 60.0))
+        setting_dlcount = int(self.settings.value('dl_sametime', 3))
         self.settings.endGroup()
 
         self.cbox_pixiv.setChecked(setting_pixiv_proxy)
@@ -189,6 +198,7 @@ class MiscSettingDialog(QWidget):
         self.ledit_http.setText(setting_proxy['http'])
         self.ledit_https.setText(setting_proxy['https'])
         self.sbox_simi.setValue(setting_similarity)
+        self.sbox_dlcount.setValue(setting_dlcount)
         self.btn_cookies.setDisabled(False)
         self.btn_cookies.setText('清除Cookies')
         self.closed.emit()

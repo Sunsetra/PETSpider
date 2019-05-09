@@ -450,6 +450,10 @@ class MainWidget(QWidget):
         folder_rule = self.settings.value('pixiv_folder_rule', {0: 'illustId'})
         file_rule = self.settings.value('pixiv_file_rule', {0: 'illustId'})
         self.settings.endGroup()
+        self.settings.beginGroup('MiscSetting')
+        dl_sametime = int(self.settings.value('dl_sametime', 3))
+        self.settings.endGroup()
+        self.thread_pool.setMaxThreadCount(dl_sametime)
         for i in range(len(items) // 6):
             info = pixiv.fetcher(items[i * 6].text())
             path = pixiv.path_name(info, root_path, folder_rule, file_rule)
@@ -462,13 +466,16 @@ class MainWidget(QWidget):
         path = QFileDialog.getOpenFileName(self, '选择图片', os.path.abspath('.'), '图片文件(*.jpg *.png)')
         if path[0]:
             self.btn_snao.setDisabled(True)
-            self.btn_get.setDisabled(True)
-            self.btn_dl.setDisabled(True)
+            self.btn_snao.setText('正在上传')
             self.sauce_thread = SauceNAOThread(self.glovar.session, self.glovar.proxy, path[0])
             self.sauce_thread.search_success.connect(self.tabulate)
             self.sauce_thread.except_signal.connect(globj.show_messagebox)
-            self.sauce_thread.finished.connect(partial(self.btn_get.setDisabled, False))
+            self.sauce_thread.finished.connect(self.search_pic_finished)
             self.sauce_thread.start()
+
+    def search_pic_finished(self):
+        self.btn_snao.setText('以图搜图')
+        self.btn_snao.setDisabled(False)
 
 
 class SaveRuleSettingTab(QWidget):
