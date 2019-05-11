@@ -43,7 +43,6 @@ class MainWindow(QMainWindow):
         self.misc_setting = globj.MiscSettingDialog()
         self.misc_setting.closed.connect(self.net_setting_checker)
         self.rule_setting = globj.SaveRuleDialog()
-        # self.rule_setting.closed.connect(self.dl_setting_checker)
 
         self.init_ui()
 
@@ -63,7 +62,7 @@ class MainWindow(QMainWindow):
         misc_setting.triggered.connect(self.misc_setting_dialog)
         rule_setting.triggered.connect(self.rule_setting_dialog)
 
-        self.tab_login(0)
+        self.tab_login('pixiv')
 
         self.frameGeometry().moveCenter(self.resolution.center())  # Open at middle of screen
         self.setWindowTitle('PETSpider')
@@ -91,18 +90,18 @@ class MainWindow(QMainWindow):
         if index == 0:
             # Recreate main page instance because new main page needs user name/id
             self.pixiv_main = pixiv_gui.MainWidget(self.pixiv_var, info)
-            self.pixiv_main.logout.connect(self.tab_login)
+            self.pixiv_main.logout_sig.connect(self.tab_login)
             self.tab_widget.removeTab(index)
             self.tab_widget.insertTab(0, self.pixiv_main, 'Pixiv')
 
-    def tab_login(self, index: int):
+    def tab_login(self, tab: str):
         """Switch tab widget to login page."""
-        if index == 0:
+        if tab == 'pixiv':
             # Recreate glovar instance bacause old session contains old cookies
             self.pixiv_var = self.init_var()
             self.pixiv_login = pixiv_gui.LoginWidget(self.pixiv_var)
             self.pixiv_login.login_success.connect(self.tab_logout)
-            self.tab_widget.removeTab(index)
+            self.tab_widget.removeTab(0)
             self.tab_widget.insertTab(0, self.pixiv_login, 'Pixiv')
 
     def misc_setting_dialog(self):

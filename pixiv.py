@@ -197,7 +197,8 @@ def saucenao(path: str, sim: float):
     """Search pixiv id by picture, use sauceNAO engine."""
     try:
         with open(path, 'rb') as pic:
-            res = requests.post(_SAUCENAO_URL, files={'file': pic})
+            files = {'file': ('file_name', pic)}  # Avoid requests cannot upload non-ascii filename
+            res = requests.post(_SAUCENAO_URL, files=files)
         res_html = BeautifulSoup(res.text, 'lxml')
         for item in res_html.find_all('td', class_='resulttablecontent'):
             similarity = item.find('div', class_='resultsimilarityinfo').string
@@ -390,7 +391,7 @@ def clearer():
 
 if __name__ == '__main__':
     pass
-    # resu = saucenao('D:\\3C62750F419B758816569E11C2B9999B.jpg')
+    # resu = saucenao('D:\\身長差_p01.jpg', 60.0)
     # if resu:
     #     print('id是: ', resu)
     # else:

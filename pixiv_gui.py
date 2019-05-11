@@ -69,8 +69,8 @@ class LoginWidget(QWidget):
     def login(self):
         """
         Login behavior.
-        If cookies in setting is not NULL, test it by fetching following.
-        Or login by username and password.
+        If cookies in setting is not NULL, test it by fetching following,
+        or login by username and password.
         """
         self.set_disabled(True)
         password = self.ledit_pw.text()
@@ -258,15 +258,16 @@ class DownloadThread(QRunnable):
 
 
 class MainWidget(QWidget):
-    logout = pyqtSignal(int)
+    logout_sig = pyqtSignal(str)
 
     def __init__(self, glovar, info):
         super().__init__()
         self.glovar = glovar
         self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
-        self.fetch_thread = None
-        self.sauce_thread = None
+        self.fetch_thread = QThread()
+        self.sauce_thread = QThread()
         self.thread_pool = QThreadPool()
+        self.cancel_download_flag = 0
 
         self.ledit_pid = globj.LineEditor()
         self.ledit_uid = globj.LineEditor()
@@ -291,7 +292,7 @@ class MainWidget(QWidget):
         self.btn_snao.clicked.connect(self.search_pic)
         self.user_info = QLabel('{0}({1})'.format(info[1], info[0]))
         self.btn_logout = QPushButton('退出登陆')
-        self.btn_logout.clicked.connect(partial(self.logout.emit, 0))
+        self.btn_logout.clicked.connect(self.logout_fn)
         self.btn_get = QPushButton('获取信息')
         self.btn_get.clicked.connect(self.fetch_new)
         self.btn_dl = QPushButton('下载')
@@ -339,7 +340,7 @@ class MainWidget(QWidget):
         left_wid.setLayout(vlay_left)
 
         vlay_right = QVBoxLayout()
-        vlay_right.addWidget(self.user_info)
+        vlay_right.addWidget(self.user_info, alignment=Qt.AlignHCenter)
         vlay_right.addWidget(self.btn_logout)
         vlay_right.addWidget(self.btn_get)
         vlay_right.addWidget(self.btn_dl)
@@ -356,11 +357,6 @@ class MainWidget(QWidget):
         vlay_main.addWidget(splitter)
         vlay_main.addWidget(self.table_viewer)
         self.setLayout(vlay_main)
-
-    def set_disabled(self, status: bool):
-        self.btn_get.setDisabled(status)
-        self.btn_dl.setDisabled(status)
-        self.btn_logout.setDisabled(status)
 
     def change_stat(self, bid):
         func = {1: self.new_stat,
@@ -431,8 +427,8 @@ class MainWidget(QWidget):
         self.table_viewer.setSortingEnabled(True)
 
     def fetch_new(self):
-        """When fetch info btn clicked, call get_detail function in pixiv.py."""
-        self.set_disabled(True)
+        self.btn_get.setDisabled(True)
+        self.btn_dl.setDisabled(True)
         pid = self.ledit_pid.text()
         uid = self.ledit_uid.text()
         num = self.ledit_num.value() if self.ledit_num.value() else 0
@@ -440,10 +436,18 @@ class MainWidget(QWidget):
         self.fetch_thread = FetchThread(self.glovar.session, self.glovar.proxy, pid, uid, num)
         self.fetch_thread.fetch_success.connect(self.tabulate)
         self.fetch_thread.except_signal.connect(globj.show_messagebox)
-        self.fetch_thread.finished.connect(partial(self.set_disabled, False))
+        self.fetch_thread.finished.connect(self.fetch_new_finished)
         self.fetch_thread.start()
 
+    def fetch_new_finished(self):
+        self.btn_get.setDisabled(False)
+        self.btn_dl.setDisabled(False)
+
     def download(self):
+        self.btn_dl.setText('取消下载')
+        self.btn_dl.clicked.disconnect(self.download)
+        self.btn_dl.clicked.connect(self.cancel_download)
+
         items = self.table_viewer.selectedItems()
         self.settings.beginGroup('RuleSetting')
         root_path = self.settings.value('pixiv_root_path', os.path.abspath('.'))
@@ -453,17 +457,40 @@ class MainWidget(QWidget):
         self.settings.beginGroup('MiscSetting')
         dl_sametime = int(self.settings.value('dl_sametime', 3))
         self.settings.endGroup()
+
         self.thread_pool.setMaxThreadCount(dl_sametime)
         for i in range(len(items) // 6):
             info = pixiv.fetcher(items[i * 6].text())
             path = pixiv.path_name(info, root_path, folder_rule, file_rule)
             thread = DownloadThread(self.glovar.session, self.glovar.proxy, info, path)
-            thread.signals.except_signal.connect(globj.show_messagebox)
-            thread.signals.download_success.connect(partial(print, ('下载完成:', items[i * 6].text())))
+            thread.signals.except_signal.connect(self.except_download)
+            thread.signals.download_success.connect(self.finish_download)
             self.thread_pool.start(thread)
 
+    def cancel_download(self):
+        self.btn_dl.setDisabled(True)
+        self.thread_pool.clear()
+        self.cancel_download_flag = 1
+
+    def except_download(self, *args):
+        self.cancel_download()
+        if not self.thread_pool.activeThreadCount():
+            # Only last active thread throw exception
+            globj.show_messagebox(args[0], args[1], args[2], args[3])
+
+    def finish_download(self):
+        # 当单个线程下载完成时，用线程池当前活跃线程数判断是否全部下载完成
+        if not self.thread_pool.activeThreadCount():
+            if self.cancel_download_flag:
+                self.btn_dl.setDisabled(False)
+            else:
+                globj.show_messagebox(self, QMessageBox.Information, '下载完成', '下载成功完成！')
+            self.btn_dl.setText('下载')
+            self.btn_dl.clicked.disconnect(self.cancel_download)
+            self.btn_dl.clicked.connect(self.download)
+
     def search_pic(self):
-        path = QFileDialog.getOpenFileName(self, '选择图片', os.path.abspath('.'), '图片文件(*.jpg *.png)')
+        path = QFileDialog.getOpenFileName(self, '选择图片', os.path.abspath('.'), '图片文件(*.gif *.jpg *.png *.bmp)')
         if path[0]:
             self.btn_snao.setDisabled(True)
             self.btn_snao.setText('正在上传')
@@ -476,6 +503,29 @@ class MainWidget(QWidget):
     def search_pic_finished(self):
         self.btn_snao.setText('以图搜图')
         self.btn_snao.setDisabled(False)
+
+    def logout_fn(self):
+        # TODO: close all threads before logout
+        self.btn_logout.setDisabled(True)
+        if self.thread_pool.activeThreadCount():
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle('正在下载')
+            msg_box.setIcon(QMessageBox.Warning)
+            msg_box.setText('下载任务正在进行中，是否退出？')
+            msg_box.addButton('确定', QMessageBox.AcceptRole)
+            msg_box.addButton('取消', QMessageBox.DestructiveRole)
+            reply = msg_box.exec()
+            if reply == QMessageBox.AcceptRole:
+                self.cancel_download()
+                self.fetch_thread.exit(-1)
+                self.sauce_thread.exit(-1)
+                self.logout_sig.emit('pixiv')
+            else:
+                self.btn_logout.setDisabled(False)
+        else:
+            self.fetch_thread.exit(-1)
+            self.sauce_thread.exit(-1)
+            self.logout_sig.emit('pixiv')
 
 
 class SaveRuleSettingTab(QWidget):
