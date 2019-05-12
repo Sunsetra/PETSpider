@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import QFormLayout, QHBoxLayout, QVBoxLayout, QGridLayout, 
 from PyQt5.QtWidgets import (QWidget, QLineEdit, QGroupBox, QPushButton, QCheckBox,
                              QMessageBox, QTabWidget, QDoubleSpinBox, QSpinBox)
 
-import pixiv_gui
+from modules import pixiv_gui
 
 _RE_SYMBOL = re.compile(r'[/\\|*?<>":]')
 _RE_PROXY = re.compile(r'.*:([1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{4}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')
@@ -66,7 +66,7 @@ class MiscSettingDialog(QWidget):
         self.sbox_simi.setSuffix(' %')
         self.sbox_dlcount = QSpinBox()
         self.sbox_dlcount.setContextMenuPolicy(Qt.NoContextMenu)
-        self.sbox_dlcount.setRange(1, 10)
+        self.sbox_dlcount.setRange(1, 5)
         self.sbox_dlcount.setWrapping(True)
 
         self.setWindowModality(Qt.ApplicationModal)

@@ -10,8 +10,7 @@ from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout,
                              QSplitter, QButtonGroup, QWidget, QGroupBox, QLineEdit, QPushButton, QCheckBox,
                              QMessageBox, QTableWidget, QLabel, QAbstractItemView, QSpinBox, QComboBox, QFileDialog)
 
-import globj
-import pixiv
+from modules import globj, pixiv
 
 
 class LoginWidget(QWidget):
@@ -238,21 +237,27 @@ class DownloadSignals(QObject):
 
 
 class DownloadThread(QRunnable):
-    def __init__(self, session, proxy, info, path):
+    def __init__(self, parent, session, proxy, info, path, page):
         super().__init__()
+        self.parent = parent
         self.session = session
         self.proxy = proxy
         self.info = info
         self.path = path
+        self.page = page
         self.signals = DownloadSignals()
 
     def run(self):
         try:
-            pixiv.download_pic(self.session, self.proxy, self.info, self.path)
+            pixiv.download_pic(self.session, self.proxy, self.info, self.path, self.page)
+        except OSError as e:
+            self.signals.except_signal.emit(self.parent, QMessageBox.Critical, '错误',
+                                            '文件系统错误：\n' + repr(e))
         except (requests.exceptions.ProxyError,
                 requests.exceptions.Timeout,
                 requests.exceptions.ConnectionError) as e:
-            self.signals.except_signal.emit(self.parent(), QMessageBox.Warning, '连接失败', '请检查网络或使用代理。\n' + repr(e))
+            self.signals.except_signal.emit(self.parent, QMessageBox.Critical, '连接失败',
+                                            '请检查网络或使用代理：\n' + repr(e))
         else:
             self.signals.download_success.emit()
 
@@ -266,7 +271,7 @@ class MainWidget(QWidget):
         self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
         self.fetch_thread = QThread()
         self.sauce_thread = QThread()
-        self.thread_pool = QThreadPool()
+        self.thread_pool = QThreadPool.globalInstance()
         self.cancel_download_flag = 0
 
         self.ledit_pid = globj.LineEditor()
@@ -462,15 +467,16 @@ class MainWidget(QWidget):
         for i in range(len(items) // 6):
             info = pixiv.fetcher(items[i * 6].text())
             path = pixiv.path_name(info, root_path, folder_rule, file_rule)
-            thread = DownloadThread(self.glovar.session, self.glovar.proxy, info, path)
-            thread.signals.except_signal.connect(self.except_download)
-            thread.signals.download_success.connect(self.finish_download)
-            self.thread_pool.start(thread)
+            for page in range(info['pageCount']):
+                thread = DownloadThread(self, self.glovar.session, self.glovar.proxy, info, path, page)
+                thread.signals.except_signal.connect(self.except_download)
+                thread.signals.download_success.connect(self.finish_download)
+                self.thread_pool.start(thread)
 
     def cancel_download(self):
         self.btn_dl.setDisabled(True)
-        self.thread_pool.clear()
         self.cancel_download_flag = 1
+        self.thread_pool.clear()
 
     def except_download(self, *args):
         self.cancel_download()
@@ -479,7 +485,6 @@ class MainWidget(QWidget):
             globj.show_messagebox(args[0], args[1], args[2], args[3])
 
     def finish_download(self):
-        # 当单个线程下载完成时，用线程池当前活跃线程数判断是否全部下载完成
         if not self.thread_pool.activeThreadCount():
             if self.cancel_download_flag:
                 self.btn_dl.setDisabled(False)
@@ -505,7 +510,6 @@ class MainWidget(QWidget):
         self.btn_snao.setDisabled(False)
 
     def logout_fn(self):
-        # TODO: close all threads before logout
         self.btn_logout.setDisabled(True)
         if self.thread_pool.activeThreadCount():
             msg_box = QMessageBox(self)
@@ -519,13 +523,17 @@ class MainWidget(QWidget):
                 self.cancel_download()
                 self.fetch_thread.exit(-1)
                 self.sauce_thread.exit(-1)
+                self.thread_pool.waitForDone()  # Close all threads before logout
                 self.logout_sig.emit('pixiv')
             else:
                 self.btn_logout.setDisabled(False)
         else:
             self.fetch_thread.exit(-1)
             self.sauce_thread.exit(-1)
+            self.thread_pool.waitForDone()
             self.logout_sig.emit('pixiv')
+
+    # TODO: reimplement closeEvent to do logout_fn()
 
 
 class SaveRuleSettingTab(QWidget):

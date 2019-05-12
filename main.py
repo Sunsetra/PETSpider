@@ -12,8 +12,7 @@ from PyQt5.QtWidgets import QMainWindow, QTabWidget
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
 
-import globj
-import pixiv_gui
+from modules import globj, pixiv_gui
 
 
 class MainWindow(QMainWindow):
