@@ -257,14 +257,14 @@ def download_pic(se, proxy: dict, item: dict, path: tuple, page: int):
     real_url = re_page.sub('_p' + str(page), item['url']) if item['pageCount'] > 1 else item['url']
     try:
         os.makedirs(path[0])
-    except OSError:  # Prevent threads starting at same time
+    except FileExistsError:  # Prevent threads starting at same time
         pass
     file_name = ''.join((path[1], '_p', str(page), os.path.splitext(real_url)[1]))
     file_path = os.path.join(path[0], file_name)
     if not os.path.exists(file_path):  # If file exists, skip it
         print('downloading', file_path)
         header = {'Referer': referer,
-                  'User-Agent': globj.GlobalVar.user_agent[random.randint(0, 2)]}
+                  'User-Agent': random.choice(globj.GlobalVar.user_agent)}
         se.headers.update(header)
         try:
             with se.get(real_url,
@@ -276,8 +276,6 @@ def download_pic(se, proxy: dict, item: dict, path: tuple, page: int):
                 with open(file_path, 'ab') as data:
                     for chunk in pic_res.iter_content():
                         data.write(chunk)
-        except OSError:  # Catch I/O error and raise it
-            raise
         except requests.Timeout:
             raise requests.Timeout('Timeout during retrieving', item['url'])
     else:

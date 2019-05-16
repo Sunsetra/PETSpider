@@ -4,7 +4,7 @@ import os
 from functools import partial
 
 import requests
-from PyQt5.QtCore import Qt, QSettings, QThread, pyqtSignal, QVariant, QRunnable, QObject, QThreadPool
+from PyQt5.QtCore import Qt, QSettings, QThread, pyqtSignal, QVariant, QRunnable, QObject, QThreadPool, QTimer
 from PyQt5.QtGui import QBrush, QColor
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QHeaderView, QTableWidgetItem,
                              QSplitter, QButtonGroup, QWidget, QGroupBox, QLineEdit, QPushButton, QCheckBox,
@@ -81,13 +81,13 @@ class LoginWidget(QWidget):
         self.settings.endGroup()
         if cookies and not password and not username:
             self.glovar.session.cookies.update(cookies)
-            self.verify_thread = VerifyThread(self.glovar.session, self.glovar.proxy)
+            self.verify_thread = VerifyThread(self, self.glovar.session, self.glovar.proxy)
             self.verify_thread.verify_success.connect(self.set_cookies)
             self.verify_thread.except_signal.connect(globj.show_messagebox)
             self.verify_thread.finished.connect(partial(self.set_disabled, False))
             self.verify_thread.start()
         else:
-            self.login_thread = LoginThread(self.glovar.session, proxy, password, username)
+            self.login_thread = LoginThread(self, self.glovar.session, proxy, password, username)
             self.login_thread.login_success.connect(self.set_cookies)
             self.login_thread.except_signal.connect(globj.show_messagebox)
             self.login_thread.finished.connect(partial(self.set_disabled, False))
@@ -109,8 +109,9 @@ class LoginThread(QThread):
     login_success = pyqtSignal(tuple)
     except_signal = pyqtSignal(object, int, str, str)
 
-    def __init__(self, session, proxy, pw, uid):
+    def __init__(self, parent, session, proxy, pw, uid):
         super().__init__()
+        self.parent = parent
         self.session = session
         self.proxy = proxy
         self.pw = pw
@@ -123,11 +124,11 @@ class LoginThread(QThread):
         except (requests.exceptions.ProxyError,
                 requests.exceptions.Timeout,
                 requests.exceptions.ConnectionError) as e:
-            self.except_signal.emit(self.parent(), QMessageBox.Warning, '连接失败', '请检查网络或使用代理。\n' + repr(e))
+            self.except_signal.emit(self.parent, QMessageBox.Warning, '连接失败', '请检查网络或使用代理。\n' + repr(e))
         except globj.ValidationError:
-            self.except_signal.emit(self.parent(), QMessageBox.Critical, '错误', '登陆名或密码错误。')
+            self.except_signal.emit(self.parent, QMessageBox.Critical, '错误', '登陆名或密码错误。')
         except globj.ResponseError as e:
-            self.except_signal.emit(self.parent(), QMessageBox.Critical,
+            self.except_signal.emit(self.parent, QMessageBox.Critical,
                                     '未知错误', '返回值错误，请向开发者反馈\n{0}'.format(repr(e)))
         else:
             self.login_success.emit(info)
@@ -137,8 +138,9 @@ class VerifyThread(QThread):
     verify_success = pyqtSignal(tuple)
     except_signal = pyqtSignal(object, int, str, str)
 
-    def __init__(self, session, proxy):
+    def __init__(self, parent, session, proxy):
         super().__init__()
+        self.parent = parent
         self.session = session
         self.proxy = proxy
 
@@ -148,9 +150,9 @@ class VerifyThread(QThread):
         except (requests.exceptions.ProxyError,
                 requests.exceptions.Timeout,
                 requests.exceptions.ConnectionError) as e:
-            self.except_signal.emit(self.parent(), QMessageBox.Warning, '连接失败', '请检查网络或使用代理。\n' + repr(e))
+            self.except_signal.emit(self.parent, QMessageBox.Warning, '连接失败', '请检查网络或使用代理。\n' + repr(e))
         except globj.ResponseError:
-            self.except_signal.emit(self.parent(), QMessageBox.Critical, '登陆失败', '请尝试清除cookies重新登陆。')
+            self.except_signal.emit(self.parent, QMessageBox.Critical, '登陆失败', '请尝试清除cookies重新登陆。')
         else:
             self.verify_success.emit(info)
 
@@ -159,8 +161,9 @@ class FetchThread(QThread):
     fetch_success = pyqtSignal(list)
     except_signal = pyqtSignal(object, int, str, str)
 
-    def __init__(self, session, proxy: dict, pid: str, uid: str, num: int):
+    def __init__(self, parent, session, proxy: dict, pid: str, uid: str, num: int):
         super().__init__()
+        self.parent = parent
         self.session = session
         self.proxy = proxy
         self.pid = pid
@@ -188,9 +191,9 @@ class FetchThread(QThread):
         except (requests.exceptions.ProxyError,
                 requests.exceptions.Timeout,
                 requests.exceptions.ConnectionError) as e:
-            self.except_signal.emit(self.parent(), QMessageBox.Warning, '连接失败', '请检查网络或使用代理。\n' + repr(e))
+            self.except_signal.emit(self.parent, QMessageBox.Warning, '连接失败', '请检查网络或使用代理。\n' + repr(e))
         except globj.ResponseError as e:
-            self.except_signal.emit(self.parent(), QMessageBox.Critical,
+            self.except_signal.emit(self.parent, QMessageBox.Critical,
                                     '未知错误', '返回值错误，请向开发者反馈\n{0}'.format(repr(e)))
         else:
             self.fetch_success.emit(results)
@@ -200,8 +203,9 @@ class SauceNAOThread(QThread):
     search_success = pyqtSignal(list)
     except_signal = pyqtSignal(object, int, str, str)
 
-    def __init__(self, session, proxy, path):
+    def __init__(self, parent, session, proxy, path):
         super().__init__()
+        self.parent = parent
         self.session = session
         self.proxy = proxy
         self.path = path
@@ -215,17 +219,17 @@ class SauceNAOThread(QThread):
         try:
             pid = pixiv.saucenao(self.path, similarity)
             if pid:
-                self.fetch_thread = FetchThread(self.session, self.proxy, pid, '', 0)
+                self.fetch_thread = FetchThread(self.parent, self.session, self.proxy, pid, '', 0)
                 self.fetch_thread.fetch_success.connect(self.emit)
                 self.fetch_thread.except_signal.connect(globj.show_messagebox)
                 self.fetch_thread.start()
             else:
-                self.except_signal.emit(self.parent(), QMessageBox.Information,
+                self.except_signal.emit(self.parent, QMessageBox.Information,
                                         '未找到', 'Pixiv不存在这张图或相似率过低，请尝试在首选项中降低相似度阈值。')
         except FileNotFoundError:
-            self.except_signal.emit(self.parent(), QMessageBox.Critical, '错误', '文件不存在')
+            self.except_signal.emit(self.parent, QMessageBox.Critical, '错误', '文件不存在')
         except requests.Timeout as e:
-            self.except_signal.emit(self.parent(), QMessageBox.Critical, '连接失败', '请检查网络或使用代理。\n' + repr(e))
+            self.except_signal.emit(self.parent, QMessageBox.Critical, '连接失败', '请检查网络或使用代理。\n' + repr(e))
 
     def emit(self, arg):
         self.search_success.emit(arg)
@@ -250,14 +254,15 @@ class DownloadThread(QRunnable):
     def run(self):
         try:
             pixiv.download_pic(self.session, self.proxy, self.info, self.path, self.page)
-        except OSError as e:
-            self.signals.except_signal.emit(self.parent, QMessageBox.Critical, '错误',
-                                            '文件系统错误：\n' + repr(e))
         except (requests.exceptions.ProxyError,
                 requests.exceptions.Timeout,
-                requests.exceptions.ConnectionError) as e:
+                requests.exceptions.ConnectionError,
+                requests.exceptions.ChunkedEncodingError) as e:
             self.signals.except_signal.emit(self.parent, QMessageBox.Critical, '连接失败',
                                             '请检查网络或使用代理：\n' + repr(e))
+        except (FileNotFoundError, PermissionError) as e:
+            self.signals.except_signal.emit(self.parent, QMessageBox.Critical, '错误',
+                                            '文件系统错误：\n' + repr(e))
         else:
             self.signals.download_success.emit()
 
@@ -271,7 +276,12 @@ class MainWidget(QWidget):
         self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
         self.fetch_thread = QThread()
         self.sauce_thread = QThread()
+
         self.thread_pool = QThreadPool.globalInstance()
+        self.ATC_monitor = QTimer()  # Use QTimer to monitor ACT when exception catched
+        self.ATC_monitor.setInterval(500)
+        self.ATC_monitor.timeout.connect(self.except_checker)
+        self.except_info = None  # Store message box function instance
         self.cancel_download_flag = 0
 
         self.ledit_pid = globj.LineEditor()
@@ -438,7 +448,7 @@ class MainWidget(QWidget):
         uid = self.ledit_uid.text()
         num = self.ledit_num.value() if self.ledit_num.value() else 0
 
-        self.fetch_thread = FetchThread(self.glovar.session, self.glovar.proxy, pid, uid, num)
+        self.fetch_thread = FetchThread(self, self.glovar.session, self.glovar.proxy, pid, uid, num)
         self.fetch_thread.fetch_success.connect(self.tabulate)
         self.fetch_thread.except_signal.connect(globj.show_messagebox)
         self.fetch_thread.finished.connect(self.fetch_new_finished)
@@ -480,14 +490,26 @@ class MainWidget(QWidget):
 
     def except_download(self, *args):
         self.cancel_download()
+        if not self.except_info:
+            self.except_info = args
+            self.ATC_monitor.start()
+
+    def except_checker(self):
         if not self.thread_pool.activeThreadCount():
-            # Only last active thread throw exception
-            globj.show_messagebox(args[0], args[1], args[2], args[3])
+            self.ATC_monitor.stop()
+            globj.show_messagebox(*self.except_info)
+            self.btn_dl.setDisabled(False)
+            self.btn_dl.setText('下载')
+            self.btn_dl.clicked.disconnect(self.cancel_download)
+            self.btn_dl.clicked.connect(self.download)
 
     def finish_download(self):
+        print('线程结束:', self.thread_pool.activeThreadCount())
         if not self.thread_pool.activeThreadCount():
             if self.cancel_download_flag:
                 self.btn_dl.setDisabled(False)
+            elif self.except_info:
+                self.except_info()
             else:
                 globj.show_messagebox(self, QMessageBox.Information, '下载完成', '下载成功完成！')
             self.btn_dl.setText('下载')
@@ -499,7 +521,7 @@ class MainWidget(QWidget):
         if path[0]:
             self.btn_snao.setDisabled(True)
             self.btn_snao.setText('正在上传')
-            self.sauce_thread = SauceNAOThread(self.glovar.session, self.glovar.proxy, path[0])
+            self.sauce_thread = SauceNAOThread(self, self.glovar.session, self.glovar.proxy, path[0])
             self.sauce_thread.search_success.connect(self.tabulate)
             self.sauce_thread.except_signal.connect(globj.show_messagebox)
             self.sauce_thread.finished.connect(self.search_pic_finished)
@@ -509,7 +531,7 @@ class MainWidget(QWidget):
         self.btn_snao.setText('以图搜图')
         self.btn_snao.setDisabled(False)
 
-    def logout_fn(self):
+    def logout_fn(self) -> bool:
         self.btn_logout.setDisabled(True)
         if self.thread_pool.activeThreadCount():
             msg_box = QMessageBox(self)
@@ -525,15 +547,16 @@ class MainWidget(QWidget):
                 self.sauce_thread.exit(-1)
                 self.thread_pool.waitForDone()  # Close all threads before logout
                 self.logout_sig.emit('pixiv')
+                return True
             else:
                 self.btn_logout.setDisabled(False)
+                return False
         else:
             self.fetch_thread.exit(-1)
             self.sauce_thread.exit(-1)
             self.thread_pool.waitForDone()
             self.logout_sig.emit('pixiv')
-
-    # TODO: reimplement closeEvent to do logout_fn()
+            return True
 
 
 class SaveRuleSettingTab(QWidget):

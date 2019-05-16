@@ -122,13 +122,14 @@ class MainWindow(QMainWindow):
                                self.y() + (self.height() - self.rule_setting.sizeHint().height()) / 2)
         self.rule_setting.show()
 
-    # def dl_setting_checker(self):
-    #     self.settings.beginGroup('DownloadSetting')
-    #     if int(self.settings.value('pixiv_proxy', False)):
-    #         self.pixiv_var.proxy = self.settings.value('proxy', {})
-    #     else:
-    #         self.pixiv_var.proxy = {}
-    #     self.settings.endGroup()
+    def closeEvent(self, event):
+        """Clear running threads of all tabs before closing."""
+        # Is there any better ideas?
+        if self.pixiv_main:
+            if self.pixiv_main.logout_fn():
+                event.accept()
+            else:
+                event.ignore()
 
 
 if __name__ == '__main__':
