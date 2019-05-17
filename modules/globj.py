@@ -6,9 +6,8 @@ import re
 
 from PyQt5.QtCore import Qt, QSettings, pyqtSignal
 from PyQt5.QtGui import QFont
-from PyQt5.QtWidgets import QFormLayout, QHBoxLayout, QVBoxLayout, QGridLayout, QMenu
-from PyQt5.QtWidgets import (QWidget, QLineEdit, QGroupBox, QPushButton, QCheckBox,
-                             QMessageBox, QTabWidget, QDoubleSpinBox, QSpinBox)
+from PyQt5.QtWidgets import (QWidget, QLineEdit, QGroupBox, QPushButton, QCheckBox, QMessageBox, QTabWidget,
+                             QDoubleSpinBox, QSpinBox, QFormLayout, QHBoxLayout, QVBoxLayout, QGridLayout, QMenu)
 
 from modules import pixiv_gui
 
@@ -56,8 +55,7 @@ class MiscSettingDialog(QWidget):
         self.cbox_twitter = QCheckBox('Twitter')  # Proxy availability
         self.ledit_http = LineEditor()  # Http proxy
         self.ledit_https = LineEditor()  # Https proxy
-        self.btn_cookies = QPushButton('清除Cookies', self)
-        self.btn_cookies.clicked.connect(self.clear_cookies)
+
         self.sbox_simi = QDoubleSpinBox()
         self.sbox_simi.setContextMenuPolicy(Qt.NoContextMenu)
         self.sbox_simi.setRange(0, 100)
@@ -95,7 +93,6 @@ class MiscSettingDialog(QWidget):
         self.sbox_dlcount.setValue(setting_dlcount)
 
         btn_ok = QPushButton('确定', self)
-        btn_ok.setDefault(True)
         btn_ok.clicked.connect(self.store)
         btn_canc = QPushButton('取消', self)
         btn_canc.clicked.connect(self.close)
@@ -112,27 +109,25 @@ class MiscSettingDialog(QWidget):
         flay_proxy.addRow('https://', self.ledit_https)
 
         vlay_cbox = QVBoxLayout()  # Combine into GroupBox
-        vlay_cbox.setSpacing(20)
         vlay_cbox.addLayout(hlay_cbox)
         vlay_cbox.addLayout(flay_proxy)
         gbox_proxy.setLayout(vlay_cbox)
 
         gbox_misc = QGroupBox('杂项')
         flay_misc = QFormLayout()
-        flay_misc.addRow('登陆信息', self.btn_cookies)
         flay_misc.addRow('图片相似度', self.sbox_simi)
         flay_misc.addRow('同时下载数', self.sbox_dlcount)
         gbox_misc.setLayout(flay_misc)
+
+        glay_all = QGridLayout()
+        glay_all.addWidget(gbox_proxy, 0, 0)
+        glay_all.addWidget(gbox_misc, 0, 1)
 
         hlay_btn = QHBoxLayout()  # Confirm and cancel button
         hlay_btn.addStretch(1)
         hlay_btn.addWidget(btn_ok)
         hlay_btn.addWidget(btn_canc)
         hlay_btn.addStretch(1)
-
-        glay_all = QGridLayout()
-        glay_all.addWidget(gbox_proxy, 0, 0)
-        glay_all.addWidget(gbox_misc, 0, 1)
 
         vlay_perf = QVBoxLayout()  # All component
         vlay_perf.addLayout(glay_all)
@@ -143,16 +138,6 @@ class MiscSettingDialog(QWidget):
         self.setFixedHeight(self.sizeHint().height())
         self.setWindowTitle('首选项')
 
-    def clear_cookies(self):
-        self.btn_cookies.setDisabled(True)
-        self.settings.beginGroup('Cookies')
-        self.settings.setValue('pixiv', '')
-        self.settings.setValue('ehentai', '')
-        self.settings.setValue('twitter', '')
-        self.settings.sync()
-        self.settings.endGroup()
-        self.btn_cookies.setText('清除完成')
-
     def store(self):
         http_proxy = self.ledit_http.text()
         https_proxy = self.ledit_https.text()
@@ -162,8 +147,11 @@ class MiscSettingDialog(QWidget):
             self.settings.setValue('ehentai_proxy', int(self.cbox_ehentai.isChecked()))
             self.settings.setValue('twitter_proxy', int(self.cbox_twitter.isChecked()))
             self.settings.setValue('proxy', {'http': http_proxy, 'https': https_proxy})
+            self.settings.setValue('similarity', self.sbox_simi.value())
+            self.settings.setValue('dl_sametime', self.sbox_dlcount.value())
             self.settings.sync()
             self.settings.endGroup()
+            self.close()
         else:
             msg_box = QMessageBox(self)
             msg_box.setWindowTitle('错误')
@@ -171,18 +159,13 @@ class MiscSettingDialog(QWidget):
             msg_box.setText('请输入正确的代理地址。')
             msg_box.addButton('确定', QMessageBox.AcceptRole)
             msg_box.exec()
-        self.settings.beginGroup('MiscSetting')
-        self.settings.setValue('similarity', self.sbox_simi.value())
-        self.settings.setValue('dl_sametime', self.sbox_dlcount.value())
-        self.settings.sync()
-        self.settings.endGroup()
-        self.close()
 
     def keyPressEvent(self, k):
         if k.key() == Qt.Key_Escape:
             self.close()
 
     def closeEvent(self, event):
+        """Restore settings in the ini file, for the setting window will not be destroyed."""
         self.settings.beginGroup('MiscSetting')
         setting_pixiv_proxy = int(self.settings.value('pixiv_proxy', False))
         setting_ehentai_proxy = int(self.settings.value('ehentai_proxy', False))
@@ -199,14 +182,11 @@ class MiscSettingDialog(QWidget):
         self.ledit_https.setText(setting_proxy['https'])
         self.sbox_simi.setValue(setting_similarity)
         self.sbox_dlcount.setValue(setting_dlcount)
-        self.btn_cookies.setDisabled(False)
-        self.btn_cookies.setText('清除Cookies')
         self.closed.emit()
 
 
 class SaveRuleDialog(QWidget):
     """Save rule dialog class."""
-    # closed = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -254,7 +234,6 @@ class SaveRuleDialog(QWidget):
 
     def closeEvent(self, event):
         self.pixiv_tab.restore()
-        # self.closed.emit()
 
 
 class LineEditor(QLineEdit):

@@ -6,9 +6,8 @@ from multiprocessing import freeze_support
 
 import requests
 from PyQt5.QtCore import QSettings, QCoreApplication
-from PyQt5.QtGui import QFont, QGuiApplication
-from PyQt5.QtWidgets import QAction, QApplication
-from PyQt5.QtWidgets import QMainWindow, QTabWidget
+from PyQt5.QtGui import QFont, QGuiApplication, QIcon
+from PyQt5.QtWidgets import QAction, QApplication, QMainWindow, QTabWidget, QMessageBox
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
 
@@ -29,6 +28,7 @@ class MainWindow(QMainWindow):
         self.pixiv_var = None  # Pixiv global vars
         self.pixiv_login = None  # Pixiv login page
         self.pixiv_main = None  # Pixiv main page
+        self.pixiv_icon = QIcon(os.path.join(bundle_dir, 'icon', 'pixiv.png'))
 
         self.ehentai_wid = None
         self.ehentai_var = None
@@ -36,11 +36,10 @@ class MainWindow(QMainWindow):
         self.twitter_var = None
 
         self.tab_widget = QTabWidget()  # Main widget of main window
-        self.tab_widget.setTabShape(QTabWidget.Triangular)
         self.setCentralWidget(self.tab_widget)
 
         self.misc_setting = globj.MiscSettingDialog()
-        self.misc_setting.closed.connect(self.net_setting_checker)
+        self.misc_setting.closed.connect(self.misc_setting_checker)
         self.rule_setting = globj.SaveRuleDialog()
 
         self.init_ui()
@@ -48,9 +47,12 @@ class MainWindow(QMainWindow):
     def init_ui(self):
         menu_bar = self.menuBar()
         file_menu = menu_bar.addMenu('文件(&F)')
-        file_menu.addSeparator()
+        act_cookies = QAction('清除Cookie(&C)', self)
+        act_cookies.triggered.connect(self.clear_cookies)
         act_exit = QAction('退出(&Q)', self)
         act_exit.triggered.connect(QCoreApplication.quit)
+        file_menu.addAction(act_cookies)
+        file_menu.addSeparator()
         file_menu.addAction(act_exit)
 
         setting_menu = menu_bar.addMenu('设置(&S)')
@@ -84,14 +86,14 @@ class MainWindow(QMainWindow):
         self.settings.endGroup()
         return globj.GlobalVar(session, proxy)
 
-    def tab_logout(self, index: int, info=None):
+    def tab_logout(self, tab: str, info=None):
         """Switch tab widget to main page."""
-        if index == 0:
-            # Recreate main page instance because new main page needs user name/id
+        if tab == 'pixiv':
+            # Recreate main page instance because new main page needs user's name/id
             self.pixiv_main = pixiv_gui.MainWidget(self.pixiv_var, info)
             self.pixiv_main.logout_sig.connect(self.tab_login)
-            self.tab_widget.removeTab(index)
-            self.tab_widget.insertTab(0, self.pixiv_main, 'Pixiv')
+            self.tab_widget.removeTab(0)
+            self.tab_widget.insertTab(0, self.pixiv_main, self.pixiv_icon, 'Pixiv')
 
     def tab_login(self, tab: str):
         """Switch tab widget to login page."""
@@ -101,20 +103,30 @@ class MainWindow(QMainWindow):
             self.pixiv_login = pixiv_gui.LoginWidget(self.pixiv_var)
             self.pixiv_login.login_success.connect(self.tab_logout)
             self.tab_widget.removeTab(0)
-            self.tab_widget.insertTab(0, self.pixiv_login, 'Pixiv')
+            self.tab_widget.insertTab(0, self.pixiv_login, self.pixiv_icon, 'Pixiv')
+
+    def clear_cookies(self):
+        self.settings.beginGroup('Cookies')
+        self.settings.setValue('pixiv', '')
+        self.settings.setValue('ehentai', '')
+        self.settings.setValue('twitter', '')
+        self.settings.sync()
+        self.settings.endGroup()
+        self.pixiv_login.clear_cookies()
+        globj.show_messagebox(self, QMessageBox.Information, '清除完成', '成功清除登陆信息！')
 
     def misc_setting_dialog(self):
         self.misc_setting.move(self.x() + (self.width() - self.misc_setting.sizeHint().width()) / 2,
                                self.y() + (self.height() - self.misc_setting.sizeHint().height()) / 2)
         self.misc_setting.show()
 
-    def net_setting_checker(self):
+    def misc_setting_checker(self):
+        """Make the proxy active immediately."""
         self.settings.beginGroup('MiscSetting')
         if int(self.settings.value('pixiv_proxy', False)):
             self.pixiv_var.proxy = self.settings.value('proxy', {})
         else:
             self.pixiv_var.proxy = {}
-        # There also need ehentai and twitter proxy changer later
         self.settings.endGroup()
 
     def rule_setting_dialog(self):
@@ -123,8 +135,7 @@ class MainWindow(QMainWindow):
         self.rule_setting.show()
 
     def closeEvent(self, event):
-        """Clear running threads of all tabs before closing."""
-        # Is there any better ideas?
+        """Do cleaning before closing."""
         if self.pixiv_main:
             if self.pixiv_main.logout_fn():
                 event.accept()

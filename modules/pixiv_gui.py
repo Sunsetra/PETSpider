@@ -14,7 +14,7 @@ from modules import globj, pixiv
 
 
 class LoginWidget(QWidget):
-    login_success = pyqtSignal(int, tuple)
+    login_success = pyqtSignal(str, tuple)
 
     def __init__(self, glovar):
         super().__init__()
@@ -101,8 +101,15 @@ class LoginWidget(QWidget):
             self.settings.setValue('pixiv', '')
         self.settings.sync()
         self.settings.endGroup()
-        self.login_success.emit(0, info)
+        self.login_success.emit('pixiv', info)
         self.set_disabled(False)
+
+    def clear_cookies(self):
+        self.ledit_un.clear()
+        self.ledit_un.setPlaceholderText('')
+        self.ledit_pw.clear()
+        self.ledit_pw.setPlaceholderText('')
+        self.cbox_cookie.setChecked(False)
 
 
 class LoginThread(QThread):
