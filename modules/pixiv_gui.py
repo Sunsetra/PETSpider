@@ -1,11 +1,12 @@
 # coding:utf-8
 """GUI components of Pixiv tab."""
 import os
+import re
 from functools import partial
 
 import requests
 from PyQt5.QtCore import Qt, QSettings, QThread, pyqtSignal, QVariant, QRunnable, QObject, QThreadPool, QTimer
-from PyQt5.QtGui import QBrush, QColor
+from PyQt5.QtGui import QBrush, QColor, QPixmap
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QHeaderView, QTableWidgetItem,
                              QSplitter, QButtonGroup, QWidget, QGroupBox, QLineEdit, QPushButton, QCheckBox,
                              QMessageBox, QTableWidget, QLabel, QAbstractItemView, QSpinBox, QComboBox, QFileDialog)
@@ -128,9 +129,7 @@ class LoginThread(QThread):
         try:
             pixiv.login(self.session, proxy=self.proxy, pw=self.pw, uid=self.uid)
             info = pixiv.get_user(self.session, self.proxy)
-        except (requests.exceptions.ProxyError,
-                requests.exceptions.Timeout,
-                requests.exceptions.ConnectionError) as e:
+        except requests.exceptions.RequestException as e:
             self.except_signal.emit(self.parent, QMessageBox.Warning, '连接失败', '请检查网络或使用代理。\n' + repr(e))
         except globj.ValidationError:
             self.except_signal.emit(self.parent, QMessageBox.Critical, '错误', '登陆名或密码错误。')
@@ -247,7 +246,7 @@ class DownloadSignals(QObject):
     except_signal = pyqtSignal(object, int, str, str)
 
 
-class DownloadThread(QRunnable):
+class DownloadPicThread(QRunnable):
     def __init__(self, parent, session, proxy, info, path, page):
         super().__init__()
         self.parent = parent
@@ -449,46 +448,61 @@ class MainWidget(QWidget):
         self.table_viewer.setSortingEnabled(True)
 
     def fetch_new(self):
-        self.btn_get.setDisabled(True)
-        self.btn_dl.setDisabled(True)
-        pid = self.ledit_pid.text()
-        uid = self.ledit_uid.text()
+        pid = self.ledit_pid.text().strip()
+        uid = self.ledit_uid.text().strip()
         num = self.ledit_num.value() if self.ledit_num.value() else 0
-
-        self.fetch_thread = FetchThread(self, self.glovar.session, self.glovar.proxy, pid, uid, num)
-        self.fetch_thread.fetch_success.connect(self.tabulate)
-        self.fetch_thread.except_signal.connect(globj.show_messagebox)
-        self.fetch_thread.finished.connect(self.fetch_new_finished)
-        self.fetch_thread.start()
+        if pid or uid:
+            if re.match(r'^\d{2,9}$', pid) or re.match(r'^\d{2,9}$', uid):
+                self.btn_get.setDisabled(True)
+                self.btn_dl.setDisabled(True)
+                self.fetch_thread = FetchThread(self, self.glovar.session, self.glovar.proxy, pid, uid, num)
+                self.fetch_thread.fetch_success.connect(self.tabulate)
+                self.fetch_thread.except_signal.connect(globj.show_messagebox)
+                self.fetch_thread.finished.connect(self.fetch_new_finished)
+                self.fetch_thread.start()
+            else:
+                globj.show_messagebox(self, QMessageBox.Warning, '错误', 'ID号输入错误！')
+        elif num:
+            self.btn_get.setDisabled(True)
+            self.btn_dl.setDisabled(True)
+            self.fetch_thread = FetchThread(self, self.glovar.session, self.glovar.proxy, pid, uid, num)
+            self.fetch_thread.fetch_success.connect(self.tabulate)
+            self.fetch_thread.except_signal.connect(globj.show_messagebox)
+            self.fetch_thread.finished.connect(self.fetch_new_finished)
+            self.fetch_thread.start()
+        else:
+            globj.show_messagebox(self, QMessageBox.Warning, '错误', '请输入查询信息！')
 
     def fetch_new_finished(self):
         self.btn_get.setDisabled(False)
         self.btn_dl.setDisabled(False)
 
     def download(self):
-        self.btn_dl.setText('取消下载')
-        self.btn_dl.clicked.disconnect(self.download)
-        self.btn_dl.clicked.connect(self.cancel_download)
-
         items = self.table_viewer.selectedItems()
-        self.settings.beginGroup('RuleSetting')
-        root_path = self.settings.value('pixiv_root_path', os.path.abspath('.'))
-        folder_rule = self.settings.value('pixiv_folder_rule', {0: 'illustId'})
-        file_rule = self.settings.value('pixiv_file_rule', {0: 'illustId'})
-        self.settings.endGroup()
-        self.settings.beginGroup('MiscSetting')
-        dl_sametime = int(self.settings.value('dl_sametime', 3))
-        self.settings.endGroup()
+        if items:
+            self.btn_dl.setText('取消下载')
+            self.btn_dl.clicked.disconnect(self.download)
+            self.btn_dl.clicked.connect(self.cancel_download)
+            self.settings.beginGroup('RuleSetting')
+            root_path = self.settings.value('pixiv_root_path', os.path.abspath('.'))
+            folder_rule = self.settings.value('pixiv_folder_rule', {0: 'illustId'})
+            file_rule = self.settings.value('pixiv_file_rule', {0: 'illustId'})
+            self.settings.endGroup()
+            self.settings.beginGroup('MiscSetting')
+            dl_sametime = int(self.settings.value('dl_sametime', 3))
+            self.settings.endGroup()
 
-        self.thread_pool.setMaxThreadCount(dl_sametime)
-        for i in range(len(items) // 6):
-            info = pixiv.fetcher(items[i * 6].text())
-            path = pixiv.path_name(info, root_path, folder_rule, file_rule)
-            for page in range(info['pageCount']):
-                thread = DownloadThread(self, self.glovar.session, self.glovar.proxy, info, path, page)
-                thread.signals.except_signal.connect(self.except_download)
-                thread.signals.download_success.connect(self.finish_download)
-                self.thread_pool.start(thread)
+            self.thread_pool.setMaxThreadCount(dl_sametime)
+            for i in range(len(items) // 6):
+                info = pixiv.fetcher(items[i * 6].text())
+                path = pixiv.path_name(info, root_path, folder_rule, file_rule)
+                for page in range(info['pageCount']):
+                    thread = DownloadPicThread(self, self.glovar.session, self.glovar.proxy, info, path, page)
+                    thread.signals.except_signal.connect(self.except_download)
+                    thread.signals.download_success.connect(self.finish_download)
+                    self.thread_pool.start(thread)
+        else:
+            globj.show_messagebox(self, QMessageBox.Warning, '警告', '请选择至少一行！')
 
     def cancel_download(self):
         self.btn_dl.setDisabled(True)
@@ -577,11 +591,11 @@ class SaveRuleSettingTab(QWidget):
         super().__init__()
         self.settings = settings
         self.root_path = None
-        self.folder_rule = None
-        self.file_rule = None
+        self.folder_rule = {}
+        self.file_rule = {}
 
         self.sbox_folder = QSpinBox()
-        self.sbox_folder.setMinimum(1)
+        self.sbox_folder.setMinimum(0)
         self.sbox_folder.setMaximum(5)
         self.sbox_folder.setContextMenuPolicy(Qt.NoContextMenu)
         self.sbox_folder.valueChanged.connect(self.folder_cbox_updater)
@@ -607,8 +621,8 @@ class SaveRuleSettingTab(QWidget):
         self.ledit_prev.setContextMenuPolicy(Qt.NoContextMenu)
 
         self.restore()
-        self.folder_cbox_updater(1)
-        self.file_cbox_updater(1)
+        self.folder_cbox_updater(len(self.folder_rule))
+        self.file_cbox_updater(len(self.file_rule))
         self.init_ui()
 
     def init_ui(self):
@@ -645,14 +659,26 @@ class SaveRuleSettingTab(QWidget):
 
     def folder_cbox_updater(self, new):
         now = self.hlay_folder_cbox.count()
-        if now < new:
-            for i in range(now, new):
-                self.hlay_folder_cbox.addWidget(self.cbox_folder_list[i])
-                self.cbox_folder_list[i].show()
+        if now <= new:
+            if self.cbox_folder_list[0].isEnabled():
+                for i in range(now, new):
+                    self.hlay_folder_cbox.addWidget(self.cbox_folder_list[i])
+                    self.cbox_folder_list[i].show()
+            else:
+                self.cbox_folder_list[0].setDisabled(False)
+                for i in range(1, new):
+                    self.hlay_folder_cbox.addWidget(self.cbox_folder_list[i])
+                    self.cbox_folder_list[i].show()
         else:
-            for i in range(4, new - 1, -1):
-                self.hlay_folder_cbox.removeWidget(self.cbox_folder_list[i])
-                self.cbox_folder_list[i].hide()
+            if new:
+                for i in range(4, new - 1, -1):
+                    self.hlay_folder_cbox.removeWidget(self.cbox_folder_list[i])
+                    self.cbox_folder_list[i].hide()
+            else:
+                for i in range(4, 0, -1):
+                    self.hlay_folder_cbox.removeWidget(self.cbox_folder_list[i])
+                    self.cbox_folder_list[i].hide()
+                self.cbox_folder_list[0].setDisabled(True)
         self.folder_rule = {i: self._name_dic[self.cbox_folder_list[i].currentText()]
                             for i in range(new)}
         self.previewer()
@@ -706,11 +732,13 @@ class SaveRuleSettingTab(QWidget):
                     'createDate': '创建日期'}
         self.settings.beginGroup('RuleSetting')
         self.root_path = self.settings.value('pixiv_root_path', os.path.abspath('.'))
+        # Set two folder_rule vars, in case of global var modified.
         self.folder_rule = folder_rule = self.settings.value('pixiv_folder_rule', {0: 'illustId'})
         self.file_rule = file_rule = self.settings.value('pixiv_file_rule', {0: 'illustId'})
         self.settings.endGroup()
         self.sbox_folder.setValue(len(folder_rule))
         self.sbox_file.setValue(len(file_rule))
+        # Set cbox's value to default PID, when *_rule shorter than 5.
         for i in range(5):
             try:
                 self.cbox_folder_list[i].setCurrentText(name_dic[folder_rule[i]])
@@ -720,6 +748,8 @@ class SaveRuleSettingTab(QWidget):
                 self.cbox_file_list[i].setCurrentText(name_dic[file_rule[i]])
             except KeyError:
                 self.cbox_file_list[i].setCurrentText('PID')
+        if not len(folder_rule):
+            self.cbox_folder_list[0].setDisabled(True)
         self.previewer()  # Necessary when select root path without clicking Confirm
 
 

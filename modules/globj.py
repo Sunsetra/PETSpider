@@ -23,9 +23,10 @@ class GlobalVar(object):
                   ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
                    'Chrome/64.0.3282.140 Safari/537.36 Edge/18.17763'))
 
-    def __init__(self, session, proxy: dict):
+    def __init__(self, session, proxy: dict, home: str):
         self._session = session
         self._proxy = proxy
+        self._home = home
 
     @property
     def session(self):
@@ -42,6 +43,14 @@ class GlobalVar(object):
     @proxy.setter
     def proxy(self, new: dict):
         self._proxy = new
+
+    @property
+    def home(self):
+        return self._home
+
+    @home.setter
+    def home(self, new: str):
+        self._home = new
 
 
 class MiscSettingDialog(QWidget):

@@ -88,7 +88,7 @@ class MainWindow(QMainWindow):
         self.settings.beginGroup('MiscSetting')
         proxy = self.settings.value('proxy', {})
         self.settings.endGroup()
-        return globj.GlobalVar(session, proxy)
+        return globj.GlobalVar(session, proxy, bundle_dir)
 
     def tab_logout(self, tab: str, info=None):
         """Switch tab widget to main page."""
