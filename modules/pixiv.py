@@ -6,6 +6,7 @@ import random
 import re
 import sqlite3
 from datetime import date
+from tempfile import NamedTemporaryFile
 
 import requests
 from bs4 import BeautifulSoup
@@ -166,6 +167,8 @@ def get_detail(se, pid: str, proxy: dict = None) -> dict:
     Return:
         A dict contains detail of the illustration.
     """
+    re_thumb = re.compile(r'540x540_70')
+
     try:
         with se.get(_ILLUST_URL + pid,
                     proxies=proxy,
@@ -182,6 +185,7 @@ def get_detail(se, pid: str, proxy: dict = None) -> dict:
             'illustTitle': item_json['illustTitle'],
             'createDate': create_date,
             'url': item_json['urls']['original'],
+            'thumb': re_thumb.sub('150x150', item_json['urls']['small']),
             'userId': item_json['userId'],
             'userName': item_json['userName'],
             'pageCount': item_json['pageCount']
@@ -239,6 +243,26 @@ def path_name(item: dict, save_path: str, folder_rule: dict = None, file_rule: d
         file_name = '_'.join(raw)  # File name without page number and ext
 
     return folder_name, file_name
+
+
+def download_thumb(se, proxy: dict, item: dict) -> str:
+    """Download thumbnail to a temp folder."""
+    header = {'Referer': _ROOT_URL,
+              'User-Agent': random.choice(globj.GlobalVar.user_agent)}
+    try:
+        with se.get(item['thumb'],
+                    headers=header,
+                    proxies=proxy,
+                    stream=True,
+                    timeout=5) as thumb_res:
+            with NamedTemporaryFile('w+b', prefix='PETSpider_', delete=False) as thumb:
+                for chunk in thumb_res.iter_content():
+                    thumb.write(chunk)
+                    path = thumb.name
+    except (OSError, IOError):
+        return ''
+    else:
+        return path
 
 
 def download_pic(se, proxy: dict, item: dict, path: tuple, page: int):
@@ -306,6 +330,7 @@ def fetcher(pid: str = None, pname: str = None, uid: str = None,
                 ILLUSTTITLE TEXT    NOT NULL,
                 CREATEDATE  TEXT    NOT NULL,
                 URL         TEXT    NOT NULL,
+                THUMB       TEXT    NOT NULL,
                 USERID      TEXT    NOT NULL,
                 USERNAME    TEXT    NOT NULL,
                 PAGECOUNT   INT     NOT NULL);''')
@@ -318,9 +343,10 @@ def fetcher(pid: str = None, pname: str = None, uid: str = None,
                 'illustTitle': result[1],
                 'createDate': result[2],
                 'url': result[3],
-                'userId': result[4],
-                'userName': result[5],
-                'pageCount': result[6]
+                'thumb': result[4],
+                'userId': result[5],
+                'userName': result[6],
+                'pageCount': result[7]
             } if result else None
         else:
             select_str = "CREATEDATE >= '{0}' AND CREATEDATE <= '{1}'".format(t_upper, t_lower)
@@ -336,9 +362,10 @@ def fetcher(pid: str = None, pname: str = None, uid: str = None,
                 'illustTitle': row[1],
                 'createDate': row[2],
                 'url': row[3],
-                'userId': row[4],
-                'userName': row[5],
-                'pageCount': row[6]
+                'thumb': row[4],
+                'userId': row[5],
+                'userName': row[6],
+                'pageCount': row[7]
             } for row in cursor)
     except sqlite3.OperationalError as e:
         print(repr(e))
@@ -358,6 +385,7 @@ def pusher(all_item: list):
         ILLUSTTITLE TEXT    NOT NULL,
         CREATEDATE  TEXT    NOT NULL,
         URL         TEXT    NOT NULL,
+        THUMB       TEXT    NOT NULL,
         USERID      TEXT    NOT NULL,
         USERNAME    TEXT    NOT NULL,
         PAGECOUNT   INT     NOT NULL);''')
@@ -367,58 +395,31 @@ def pusher(all_item: list):
         item['illustTitle'],
         str(item['createDate']),
         item['url'],
+        item['thumb'],
         item['userId'],
         item['userName'],
         item['pageCount']
     ) for item in all_item)
-    cursor.executemany('INSERT INTO PIXIV VALUES (?, ?, ?, ?, ?, ?, ?)', data)
+    cursor.executemany('INSERT INTO PIXIV VALUES (?, ?, ?, ?, ?, ?, ?, ?)', data)
     pdb.commit()
     pdb.close()
 
 
-def clearer():
+def cleaner():
     """Clear database info cache."""
     pdb = sqlite3.connect('database.db')
     cursor = pdb.cursor()
-    cursor.execute('''DELETE FROM PIXIV;''')
+    cursor.execute('''SELECT NAME FROM SQLITE_MASTER WHERE TYPE='table';''')
+    tables = cursor.fetchall()
+    for name in tables[0]:
+        cursor.execute('''DELETE FROM {0};'''.format(name))
     pdb.commit()
     pdb.close()
 
 
 if __name__ == '__main__':
     pass
-    # resu = saucenao('D:\\身長差_p01.jpg', 60.0)
-    # if resu:
-    #     print('id是: ', resu)
-    # else:
-    #     print('没找到')
     # session = requests.session()
-    # proxy = {'http': 'socks5://127.0.0.1:1080', 'https': 'socks5://127.0.0.1:1080'}
-    # try:
-    #     uid = input('Input user id/email:')
-    #     pw = input('Input password:')
-    #     login(session, proxy, uid, pw)
-    # except (requests.Timeout, globj.ResponseError) as e:
-    #     # Delete Window
-    #     print(repr(e))
-    # except globj.ValidationError as e:
-    #     # Reenter pw and id
-    #     print(repr(e))
-    # print(get_user(session, proxy))
-
-    # print("fetcher(pid='73437393')", fetcher(pid='73437393'))
-    # print('\n')
-    # for x in fetcher(uid='355065'):
-    #     print(x)
-    # print('\n')
-    # # fetcher(uname='朝凪')
-    # # fetcher(uname='朝?', pname='*仲良*')
-    # # fetcher(uname='*109')
-    # # fetcher(pname='*仲良*')
-    # # fetcher(uid='947930', pname='*寒中*')
-    # # fetcher(ctime='2019-03-01', uid='355065')
-    # for x in fetcher(uname='朝?', pname='*仲良*'):
-    #     print(x)
-    # print('\n')
-    # for y in fetcher(t_upper='2019-03-01', uid='355065'):
-    #     print(y)
+    # prox = {'http': 'socks5://127.0.0.1:1080', 'https': 'socks5://127.0.0.1:1080'}
+    # det = get_detail(session, '73588076', proxy=prox)
+    # download_thumb(session, prox, det)

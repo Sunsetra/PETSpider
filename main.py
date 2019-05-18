@@ -1,5 +1,6 @@
 # coding:utf-8
 """A crawler for Pixiv, E-hentai and twitter."""
+# TODO: 在搜索栏处增加缩略图预览，点击条目显示缩略图
 import os
 import sys
 from multiprocessing import freeze_support
@@ -11,7 +12,7 @@ from PyQt5.QtWidgets import QAction, QApplication, QMainWindow, QTabWidget, QMes
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
 
-from modules import globj, pixiv_gui
+from modules import globj, pixiv_gui, pixiv
 
 
 class MainWindow(QMainWindow):
@@ -47,11 +48,14 @@ class MainWindow(QMainWindow):
     def init_ui(self):
         menu_bar = self.menuBar()
         file_menu = menu_bar.addMenu('文件(&F)')
-        act_cookies = QAction('清除Cookie(&C)', self)
-        act_cookies.triggered.connect(self.clear_cookies)
+        act_clear_cookies = QAction('清除Cookie(&C)', self)
+        act_clear_cookies.triggered.connect(self.clear_cookies)
+        act_clear_db = QAction('清除数据库缓存(&D)', self)
+        act_clear_db.triggered.connect(self.clear_db)
         act_exit = QAction('退出(&Q)', self)
         act_exit.triggered.connect(QCoreApplication.quit)
-        file_menu.addAction(act_cookies)
+        file_menu.addAction(act_clear_cookies)
+        file_menu.addAction(act_clear_db)
         file_menu.addSeparator()
         file_menu.addAction(act_exit)
 
@@ -114,6 +118,10 @@ class MainWindow(QMainWindow):
         self.settings.endGroup()
         self.pixiv_login.clear_cookies()
         globj.show_messagebox(self, QMessageBox.Information, '清除完成', '成功清除登陆信息！')
+
+    def clear_db(self):
+        pixiv.cleaner()
+        globj.show_messagebox(self, QMessageBox.Information, '清除完成', '成功清除数据库缓存！')
 
     def misc_setting_dialog(self):
         self.misc_setting.move(self.x() + (self.width() - self.misc_setting.sizeHint().width()) / 2,
