@@ -8,7 +8,7 @@ import requests
 from PyQt5.QtCore import Qt, QSettings, QThread, pyqtSignal, QVariant, QRunnable, QObject, QThreadPool, QTimer
 from PyQt5.QtGui import QBrush, QColor, QPixmap
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QHeaderView, QTableWidgetItem,
-                             QSplitter, QButtonGroup, QWidget, QGroupBox, QLineEdit, QPushButton, QCheckBox,
+                             QSplitter, QButtonGroup, QWidget, QGroupBox, QLineEdit, QPushButton, QCheckBox, QFrame,
                              QMessageBox, QTableWidget, QLabel, QAbstractItemView, QSpinBox, QComboBox, QFileDialog)
 
 from modules import globj, pixiv
@@ -273,6 +273,23 @@ class DownloadPicThread(QRunnable):
             self.signals.download_success.emit()
 
 
+class DownloadThumbThread(QThread):
+    download_success = pyqtSignal(tuple)
+
+    def __init__(self, session, proxy, pid):
+        super().__init__()
+        self.session = session
+        self.proxy = proxy
+        self.pid = pid
+
+    def run(self):
+        item = pixiv.fetcher(self.pid)
+        if item:
+            path = pixiv.download_thumb(self.session, self.proxy, item)
+            if path:
+                self.download_success.emit((self.pid, path))
+
+
 class MainWidget(QWidget):
     logout_sig = pyqtSignal(str)
 
@@ -282,7 +299,7 @@ class MainWidget(QWidget):
         self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
         self.fetch_thread = QThread()
         self.sauce_thread = QThread()
-
+        self.thumb_thread = QThread()
         self.thread_pool = QThreadPool.globalInstance()
         self.ATC_monitor = QTimer()  # Use QTimer to monitor ACT when exception catched
         self.ATC_monitor.setInterval(500)
@@ -290,12 +307,33 @@ class MainWidget(QWidget):
         self.except_info = None  # Store message box function instance
         self.cancel_download_flag = 0
 
+        self.thumb_dict = dict()  # Store pid and corresponding thumbnail path
+        self.settings.beginGroup('MiscSetting')
+        self.show_thumb_flag = int(self.settings.value('thumbnail', True))
+        self.settings.endGroup()
+
         self.ledit_pid = globj.LineEditor()
         self.ledit_uid = globj.LineEditor()
         self.ledit_num = QSpinBox()
         self.ledit_num.setContextMenuPolicy(Qt.NoContextMenu)
         self.ledit_num.setMaximum(999)
         self.ledit_num.clear()
+
+        self.btn_snao = QPushButton('以图搜图')
+        self.btn_snao.clicked.connect(self.search_pic)
+        self.user_info = QLabel('{0}({1})'.format(info[1], info[0]))
+        self.btn_logout = QPushButton('退出登陆')
+        self.btn_logout.clicked.connect(self.logout_fn)
+        self.btn_get = QPushButton('获取信息')
+        self.btn_get.clicked.connect(self.fetch_new)
+        self.btn_dl = QPushButton('下载')
+        self.btn_dl.clicked.connect(self.download)
+
+        self.thumbnail = QLabel()
+        self.thumbnail.setFrameShape(QFrame.StyledPanel)
+        self.thumbnail.setAlignment(Qt.AlignCenter)
+        self.thumb_default = QPixmap(os.path.join(self.glovar.home, 'icon', 'pixiv.png'))
+        self.thumb_default = self.thumb_default.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
         self.btn_fo = QPushButton('关注的更新')
         self.btn_fo.setCheckable(True)
@@ -309,17 +347,9 @@ class MainWidget(QWidget):
         self.btn_group.addButton(self.btn_uid, 3)
         self.btn_group.buttonClicked[int].connect(self.change_stat)
 
-        self.btn_snao = QPushButton('以图搜图')
-        self.btn_snao.clicked.connect(self.search_pic)
-        self.user_info = QLabel('{0}({1})'.format(info[1], info[0]))
-        self.btn_logout = QPushButton('退出登陆')
-        self.btn_logout.clicked.connect(self.logout_fn)
-        self.btn_get = QPushButton('获取信息')
-        self.btn_get.clicked.connect(self.fetch_new)
-        self.btn_dl = QPushButton('下载')
-        self.btn_dl.clicked.connect(self.download)
-
         self.table_viewer = QTableWidget()  # Detail viewer of fetched info
+        self.table_viewer.cellPressed.connect(self.download_thumb)
+        self.table_viewer.itemSelectionChanged.connect(self.set_default_thumb)
         self.table_viewer.setWordWrap(False)
         self.table_viewer.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table_viewer.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -357,8 +387,19 @@ class MainWidget(QWidget):
         vlay_left = QVBoxLayout()
         vlay_left.addLayout(glay_lup)
         vlay_left.addLayout(glay_ldown)
+        hlay_thumb = QHBoxLayout()
+        hlay_thumb.addLayout(vlay_left)
+        hlay_thumb.addWidget(self.thumbnail)
         left_wid = QWidget()
-        left_wid.setLayout(vlay_left)
+        left_wid.setLayout(hlay_thumb)
+
+        self.thumbnail.setFixedHeight(left_wid.sizeHint().height())
+        self.thumbnail.setFixedWidth(150)
+        self.thumbnail.setPixmap(self.thumb_default)
+        if self.show_thumb_flag:
+            self.thumbnail.show()
+        else:
+            self.thumbnail.hide()
 
         vlay_right = QVBoxLayout()
         vlay_right.addWidget(self.user_info, alignment=Qt.AlignHCenter)
@@ -477,6 +518,33 @@ class MainWidget(QWidget):
         self.btn_get.setDisabled(False)
         self.btn_dl.setDisabled(False)
 
+    def download_thumb(self, row):
+        if self.show_thumb_flag:
+            pid = self.table_viewer.item(row, 0).text()
+            if pid in self.thumb_dict:  # TODO: exception may raised for the thumb doesn't exist at that path
+                thumb = QPixmap(self.thumb_dict[pid])
+                self.thumbnail.setPixmap(thumb)
+            else:
+                self.thumb_thread = DownloadThumbThread(self.glovar.session, self.glovar.proxy, pid)
+                self.thumb_thread.download_success.connect(self.show_thumb)
+                self.thumb_thread.start()
+
+    def show_thumb(self, info):
+        self.thumb_dict[info[0]] = info[1]
+        thumb = QPixmap(info[1])  # TODO: there too
+        self.thumbnail.setPixmap(thumb)
+
+    def change_thumb(self, new):
+        self.show_thumb_flag = new
+        if self.show_thumb_flag:
+            self.thumbnail.show()
+        else:
+            self.thumbnail.hide()
+
+    def set_default_thumb(self):
+        if not self.table_viewer.selectedItems() and self.show_thumb_flag:
+            self.thumbnail.setPixmap(self.thumb_default)
+
     def download(self):
         items = self.table_viewer.selectedItems()
         if items:
@@ -566,6 +634,7 @@ class MainWidget(QWidget):
                 self.cancel_download()
                 self.fetch_thread.exit(-1)
                 self.sauce_thread.exit(-1)
+                self.thumb_thread.exit(-1)
                 self.thread_pool.waitForDone()  # Close all threads before logout
                 self.logout_sig.emit('pixiv')
                 return True
@@ -575,6 +644,7 @@ class MainWidget(QWidget):
         else:
             self.fetch_thread.exit(-1)
             self.sauce_thread.exit(-1)
+            self.thumb_thread.exit(-1)
             self.thread_pool.waitForDone()
             self.logout_sig.emit('pixiv')
             return True
@@ -659,18 +729,14 @@ class SaveRuleSettingTab(QWidget):
 
     def folder_cbox_updater(self, new):
         now = self.hlay_folder_cbox.count()
-        if now <= new:
-            if self.cbox_folder_list[0].isEnabled():
-                for i in range(now, new):
-                    self.hlay_folder_cbox.addWidget(self.cbox_folder_list[i])
-                    self.cbox_folder_list[i].show()
-            else:
+        if now <= new:  # When folder rule increases, 0 to 1 is special
+            if not self.cbox_folder_list[0].isEnabled():
                 self.cbox_folder_list[0].setDisabled(False)
-                for i in range(1, new):
-                    self.hlay_folder_cbox.addWidget(self.cbox_folder_list[i])
-                    self.cbox_folder_list[i].show()
+            for i in range(now, new):
+                self.hlay_folder_cbox.addWidget(self.cbox_folder_list[i])
+                self.cbox_folder_list[i].show()
         else:
-            if new:
+            if new:  # When folder rule decreases, new-1 cannot lower than 0
                 for i in range(4, new - 1, -1):
                     self.hlay_folder_cbox.removeWidget(self.cbox_folder_list[i])
                     self.cbox_folder_list[i].hide()

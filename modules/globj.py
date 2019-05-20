@@ -75,6 +75,7 @@ class MiscSettingDialog(QWidget):
         self.sbox_dlcount.setContextMenuPolicy(Qt.NoContextMenu)
         self.sbox_dlcount.setRange(1, 5)
         self.sbox_dlcount.setWrapping(True)
+        self.cbox_thumb = QCheckBox()
 
         self.setWindowModality(Qt.ApplicationModal)
         self.setWindowFlags(Qt.CustomizeWindowHint | Qt.WindowCloseButtonHint)
@@ -89,6 +90,7 @@ class MiscSettingDialog(QWidget):
         setting_proxy = self.settings.value('proxy', {'http': '', 'https': ''})
         setting_similarity = float(self.settings.value('similarity', 60.0))
         setting_dlcount = int(self.settings.value('dl_sametime', 3))
+        setting_thumbnail = int(self.settings.value('thumbnail', True))
         self.settings.endGroup()
 
         self.cbox_pixiv.setChecked(setting_pixiv_proxy)
@@ -100,6 +102,7 @@ class MiscSettingDialog(QWidget):
         self.ledit_https.setText(setting_proxy['https'])
         self.sbox_simi.setValue(setting_similarity)
         self.sbox_dlcount.setValue(setting_dlcount)
+        self.cbox_thumb.setChecked(setting_thumbnail)
 
         btn_ok = QPushButton('确定', self)
         btn_ok.clicked.connect(self.store)
@@ -118,14 +121,17 @@ class MiscSettingDialog(QWidget):
         flay_proxy.addRow('https://', self.ledit_https)
 
         vlay_cbox = QVBoxLayout()  # Combine into GroupBox
+        vlay_cbox.setSpacing(20)
         vlay_cbox.addLayout(hlay_cbox)
         vlay_cbox.addLayout(flay_proxy)
         gbox_proxy.setLayout(vlay_cbox)
 
         gbox_misc = QGroupBox('杂项')
         flay_misc = QFormLayout()
+        flay_misc.setSpacing(20)
         flay_misc.addRow('图片相似度', self.sbox_simi)
-        flay_misc.addRow('同时下载数', self.sbox_dlcount)
+        flay_misc.addRow('并发线程数', self.sbox_dlcount)
+        flay_misc.addRow('开启预览图', self.cbox_thumb)
         gbox_misc.setLayout(flay_misc)
 
         glay_all = QGridLayout()
@@ -158,6 +164,7 @@ class MiscSettingDialog(QWidget):
             self.settings.setValue('proxy', {'http': http_proxy, 'https': https_proxy})
             self.settings.setValue('similarity', self.sbox_simi.value())
             self.settings.setValue('dl_sametime', self.sbox_dlcount.value())
+            self.settings.setValue('thumbnail', int(self.cbox_thumb.isChecked()))
             self.settings.sync()
             self.settings.endGroup()
             self.close()
@@ -182,6 +189,7 @@ class MiscSettingDialog(QWidget):
         setting_proxy = self.settings.value('proxy', {'http': '', 'https': ''})
         setting_similarity = float(self.settings.value('similarity', 60.0))
         setting_dlcount = int(self.settings.value('dl_sametime', 3))
+        setting_thumbnail = int(self.settings.value('thumbnail', True))
         self.settings.endGroup()
 
         self.cbox_pixiv.setChecked(setting_pixiv_proxy)
@@ -191,6 +199,7 @@ class MiscSettingDialog(QWidget):
         self.ledit_https.setText(setting_proxy['https'])
         self.sbox_simi.setValue(setting_similarity)
         self.sbox_dlcount.setValue(setting_dlcount)
+        self.cbox_thumb.setChecked(setting_thumbnail)
         self.closed.emit()
 
 

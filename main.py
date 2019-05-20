@@ -129,12 +129,15 @@ class MainWindow(QMainWindow):
         self.misc_setting.show()
 
     def misc_setting_checker(self):
-        """Make the proxy active immediately."""
+        """Make the proxy and thumbnail setting active immediately."""
         self.settings.beginGroup('MiscSetting')
         if int(self.settings.value('pixiv_proxy', False)):
             self.pixiv_var.proxy = self.settings.value('proxy', {})
         else:
             self.pixiv_var.proxy = {}
+        if self.pixiv_main:  # Change thumbnail behavior
+            setting_thumbnail = int(self.settings.value('thumbnail', True))
+            self.pixiv_main.change_thumb(setting_thumbnail)
         self.settings.endGroup()
 
     def rule_setting_dialog(self):
