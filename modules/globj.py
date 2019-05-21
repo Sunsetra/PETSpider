@@ -256,6 +256,7 @@ class SaveRuleDialog(QWidget):
 
 class LineEditor(QLineEdit):
     """Custom QLineEdit. Support cut, copy, paste and select all."""
+
     def __init__(self):
         super().__init__()
 
@@ -338,7 +339,8 @@ def name_verify(name: str, default: str = 'NoName') -> str:
 
 
 if __name__ == '__main__':
-    print('/con?:', name_verify('/con?', 'IllegalName'))
-    print('.hack"thank:', name_verify('.hack"thank', 'IllegalName'))
-    print('...aux*Myname...:', name_verify('...aux*Myname...', 'IllegalName'))
-    print('...:', name_verify('...', 'IllegalName'))
+    pass
+    # print('/con?:', name_verify('/con?', 'IllegalName'))
+    # print('.hack"thank:', name_verify('.hack"thank', 'IllegalName'))
+    # print('...aux*Myname...:', name_verify('...aux*Myname...', 'IllegalName'))
+    # print('...:', name_verify('...', 'IllegalName'))

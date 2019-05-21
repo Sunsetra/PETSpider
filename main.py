@@ -1,6 +1,5 @@
 # coding:utf-8
 """A crawler for Pixiv, E-hentai and twitter."""
-# TODO: 在搜索栏处增加缩略图预览，点击条目显示缩略图
 import os
 import sys
 from multiprocessing import freeze_support

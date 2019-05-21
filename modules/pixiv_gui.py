@@ -521,9 +521,14 @@ class MainWidget(QWidget):
     def download_thumb(self, row):
         if self.show_thumb_flag:
             pid = self.table_viewer.item(row, 0).text()
-            if pid in self.thumb_dict:  # TODO: exception may raised for the thumb doesn't exist at that path
-                thumb = QPixmap(self.thumb_dict[pid])
-                self.thumbnail.setPixmap(thumb)
+            if pid in self.thumb_dict:
+                thumb = QPixmap()
+                if thumb.load(self.thumb_dict[pid]):  # If thumbnail is deleted, redownload it
+                    self.thumbnail.setPixmap(thumb)
+                else:
+                    self.thumb_thread = DownloadThumbThread(self.glovar.session, self.glovar.proxy, pid)
+                    self.thumb_thread.download_success.connect(self.show_thumb)
+                    self.thumb_thread.start()
             else:
                 self.thumb_thread = DownloadThumbThread(self.glovar.session, self.glovar.proxy, pid)
                 self.thumb_thread.download_success.connect(self.show_thumb)
@@ -531,7 +536,7 @@ class MainWidget(QWidget):
 
     def show_thumb(self, info):
         self.thumb_dict[info[0]] = info[1]
-        thumb = QPixmap(info[1])  # TODO: there too
+        thumb = QPixmap(info[1])
         self.thumbnail.setPixmap(thumb)
 
     def change_thumb(self, new):
