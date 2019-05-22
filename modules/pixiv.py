@@ -21,7 +21,7 @@ _ROOT_URL = 'https://www.pixiv.net/'
 _SAUCENAO_URL = 'https://saucenao.com/search.php'
 
 
-def login(se, proxy: dict, uid: str, pw: str):
+def login(se, proxy: dict, uid: str, pw: str) -> bool:
     """Get post_key and retrieve cookies."""
     try:
         with se.get(_LOGIN_URL + 'login',

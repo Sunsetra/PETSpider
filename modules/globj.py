@@ -212,9 +212,7 @@ class SaveRuleDialog(QWidget):
         self.setWindowModality(Qt.ApplicationModal)
         self.setWindowFlags(Qt.CustomizeWindowHint | Qt.WindowCloseButtonHint)
         self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
-
         self.pixiv_tab = pixiv_gui.SaveRuleSettingTab(self.settings)
-
         self.init_ui()
 
     def init_ui(self):
