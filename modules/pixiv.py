@@ -35,21 +35,21 @@ def login(se, proxy: dict, uid: str, pw: str) -> bool:
         login_form = {'password': pw,
                       'pixiv_id': uid,
                       'post_key': pk_node['value']}
-        login_res = requests.post(_LOGIN_URL + 'api/login',
-                                  proxies=proxy,
-                                  data=login_form,
-                                  cookies=se.cookies,
-                                  timeout=5)
-        login_json = json.loads(login_res.text)['body']
-        if 'validation_errors' in login_json:
-            raise globj.ValidationError(login_json['validation_errors'])
-        elif 'success' in login_json:
-            se.cookies.update(login_res.cookies)
-            return True
-        else:
-            return False
+        with requests.post(_LOGIN_URL + 'api/login',
+                           proxies=proxy,
+                           data=login_form,
+                           cookies=se.cookies,
+                           timeout=5) as login_res:
+            login_json = json.loads(login_res.text)['body']
+            if 'validation_errors' in login_json:
+                raise globj.ValidationError(login_json['validation_errors'])
+            elif 'success' in login_json:
+                se.cookies.update(login_res.cookies)
+                return True
+            else:
+                return False
     except requests.Timeout:
-        raise requests.Timeout('Timeout during Login.')
+        raise requests.Timeout('Timeout during login.')
     except (globj.ResponseError, globj.ValidationError):
         raise
 
