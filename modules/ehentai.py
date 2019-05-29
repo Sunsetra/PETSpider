@@ -1,5 +1,6 @@
 # coding:utf-8
 """E(x)hentai components."""
+import os
 import random
 import re
 
@@ -81,10 +82,11 @@ def information(se, proxy: dict, addr: str):
     Fetch gallery information, include misc info and thumbnail.
     Args:
         se: Session instance.
-        proxy: (Optinal) The proxy used.
+        proxy: (Optional) The proxy used.
         addr: Gallery address.
     """
     re_thumb = re.compile(r'.*url\((.*)\).*')
+    # TODO: address = addr + '/' if addr[-1] != '/' else addr  # When the end of gallery addr is not /
     try:
         with se.get(addr,
                     params={'inline_set': 'ts_m'},
@@ -93,7 +95,9 @@ def information(se, proxy: dict, addr: str):
                     timeout=5) as gallery_res:
             gallery_html = BeautifulSoup(gallery_res.text, 'lxml')
         _ban_checker(gallery_html)
-        name = gallery_html.find('h1', id='gj').string
+        name = gallery_html.find('h1', id='gj').string  # Japanese name is prior
+        if not name:
+            name = gallery_html.find('h1', id='gn').string
         misc = gallery_html.find_all('td', class_='gdt2')
         thumb = re_thumb.match(gallery_html.find('div', id='gd1').div['style']).group(1)
         if name and misc and thumb:
@@ -117,7 +121,7 @@ def fetch_keys(se, proxy: dict, addr: str, info: dict) -> dict:
     Fetch keys(imgkeys and showkey) from gallery.
     Args:
         se: Session instance.
-        proxy: (Optinal) The proxy used.
+        proxy: (Optional) The proxy used.
         addr: Gallery address.
         info: Information of the gallery.
     """
@@ -157,18 +161,58 @@ def fetch_keys(se, proxy: dict, addr: str, info: dict) -> dict:
         raise globj.ResponseError('Fetching gallery keys:' + repr(e))
 
 
-def download(se, proxy: dict, addr: str):
+def download(se, proxy: dict, info: dict, keys: dict, path: str):
     """
+    Original version: one gallery same time.
     Download pictures from gallery.
     Args:
         se: Session instance.
-        proxy: (Optinal) The proxy used.
-        addr: Picture origin address.
+        proxy: (Optional) The proxy used.
+        info: Information of the gallery.
+        keys: A dictionary of imgkeys and showkey.
+        path: Save root path.
     """
+    try:
+        for i in range(1, int(info['page']) + 1):
+            with se.post(_EXHENTAI_URL + 'api.php',
+                         json={'method': 'showpage',
+                               'gid': int(info['gid']),
+                               'page': i,
+                               'imgkey': keys[str(i)],
+                               'showkey': keys['0']},
+                         headers={'User-Agent': random.choice(globj.GlobalVar.user_agent)},
+                         proxies=proxy,
+                         timeout=5) as dl_res:  # Fetch original url of picture
+                dl_json = dl_res.json()
+            if dl_json.get('error'):
+                raise globj.ResponseError(dl_json['error'])
+            elif dl_json.get('i7'):
+                url_html = BeautifulSoup(dl_json['i7'], 'lxml')
+                origin = url_html.a['href']
+            else:
+                url_html = BeautifulSoup(dl_json['i3'], 'lxml')
+                origin = url_html.a.img['src']
+
+            folder_path = os.path.join(path, info['name'])
+            if not os.path.exists(folder_path):
+                print('mkdir:', folder_path)
+                os.makedirs(folder_path)
+            with se.get(origin,
+                        headers={'User-Agent': random.choice(globj.GlobalVar.user_agent)},
+                        proxies=proxy,
+                        stream=True,
+                        timeout=5) as pic_res:
+                name = os.path.split(pic_res.url)[-1].rstrip('?dl=1')  # Get file name from url
+                real_path = os.path.join(folder_path, name)
+                print('Downloading:', real_path)
+                with open(real_path, 'ab') as data:
+                    for chunk in pic_res.iter_content():
+                        data.write(chunk)
+    except requests.Timeout:
+        raise requests.Timeout('Timeout during downloading.')
+    except (KeyError, AttributeError, globj.ResponseError) as e:
+        raise globj.ResponseError('Downloading:' + repr(e))
 
 
 if __name__ == '__main__':
     pass
-    # session = requests.session()
-    # prox = {'http': 'socks5://127.0.0.1:1080', 'https': 'socks5://127.0.0.1:1080'}
-    # account_info(session, prox)

@@ -294,7 +294,7 @@ def download_pic(se, proxy: dict, item: dict, path: tuple, page: int):
             with se.get(real_url,
                         headers=header,
                         proxies=proxy,
-                        cookies=se.cookies,
+                        cookies=se.cookies,  # TODO: remove?
                         stream=True,
                         timeout=5) as pic_res:
                 with open(file_path, 'ab') as data:
