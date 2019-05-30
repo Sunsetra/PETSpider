@@ -105,7 +105,7 @@ def information(se, proxy: dict, addr: str):
                 'gid': addr.split('/')[-3],
                 'name': name,
                 'size': misc[4].string,
-                'page': misc[5].string[:-6],
+                'page': int(misc[5].string[:-6]),
                 'thumb': thumb
             }
         else:
@@ -124,10 +124,12 @@ def fetch_keys(se, proxy: dict, addr: str, info: dict) -> dict:
         proxy: (Optional) The proxy used.
         addr: Gallery address.
         info: Information of the gallery.
+    Return:
+        A dictionary. {'page': imgkey, '0': showkey}
     """
     re_imgkey = re.compile(r'https://exhentai\.org/s/(\w{10})/\d*-(\d{1,4})')
     re_showkey = re.compile(r'[\S\s]*showkey="(\w{11})"[\S\s]*')
-    pn = int(info['page']) // 40 + 1  # range(0) has no element
+    pn = info['page'] // 40 + 1  # range(0) has no element
     keys = dict()
     try:
         for p in range(pn):
@@ -161,53 +163,56 @@ def fetch_keys(se, proxy: dict, addr: str, info: dict) -> dict:
         raise globj.ResponseError('Fetching gallery keys:' + repr(e))
 
 
-def download(se, proxy: dict, info: dict, keys: dict, path: str):
+def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, retry=False):
     """
-    Original version: one gallery same time.
-    Download pictures from gallery.
+    Download one picture.
     Args:
         se: Session instance.
         proxy: (Optional) The proxy used.
         info: Information of the gallery.
-        keys: A dictionary of imgkeys and showkey.
+        keys: Keys include imgkeys and showkey.
+        page: Page number.
         path: Save root path.
+        retry: Overwrite image instead of skipping it.
     """
     try:
-        for i in range(1, int(info['page']) + 1):
-            with se.post(_EXHENTAI_URL + 'api.php',
-                         json={'method': 'showpage',
-                               'gid': int(info['gid']),
-                               'page': i,
-                               'imgkey': keys[str(i)],
-                               'showkey': keys['0']},
-                         headers={'User-Agent': random.choice(globj.GlobalVar.user_agent)},
-                         proxies=proxy,
-                         timeout=5) as dl_res:  # Fetch original url of picture
-                dl_json = dl_res.json()
-            if dl_json.get('error'):
-                raise globj.ResponseError(dl_json['error'])
-            elif dl_json.get('i7'):
-                url_html = BeautifulSoup(dl_json['i7'], 'lxml')
-                origin = url_html.a['href']
-            else:
-                url_html = BeautifulSoup(dl_json['i3'], 'lxml')
-                origin = url_html.a.img['src']
+        with se.post(_EXHENTAI_URL + 'api.php',
+                     json={'method': 'showpage',
+                           'gid': int(info['gid']),
+                           'page': page,
+                           'imgkey': keys[str(page)],
+                           'showkey': keys['0']},
+                     headers={'User-Agent': random.choice(globj.GlobalVar.user_agent)},
+                     proxies=proxy,
+                     timeout=5) as dl_res:  # Fetch original url of picture
+            dl_json = dl_res.json()
+        if dl_json.get('error'):
+            raise globj.ResponseError(dl_json['error'])
+        elif dl_json.get('i7'):
+            url_html = BeautifulSoup(dl_json['i7'], 'lxml')  # Origin image
+            origin = url_html.a['href']
+        else:
+            url_html = BeautifulSoup(dl_json['i3'], 'lxml')  # Showing image is original
+            origin = url_html.a.img['src']
 
-            folder_path = os.path.join(path, info['name'])
-            if not os.path.exists(folder_path):
-                print('mkdir:', folder_path)
-                os.makedirs(folder_path)
-            with se.get(origin,
-                        headers={'User-Agent': random.choice(globj.GlobalVar.user_agent)},
-                        proxies=proxy,
-                        stream=True,
-                        timeout=5) as pic_res:
-                name = os.path.split(pic_res.url)[-1].rstrip('?dl=1')  # Get file name from url
-                real_path = os.path.join(folder_path, name)
+        folder_path = os.path.join(path, info['name'])
+        if not os.path.exists(folder_path):
+            print('mkdir:', folder_path)
+            os.makedirs(folder_path)
+        with se.get(origin,
+                    headers={'User-Agent': random.choice(globj.GlobalVar.user_agent)},
+                    proxies=proxy,
+                    stream=True,
+                    timeout=5) as pic_res:
+            name = os.path.split(pic_res.url)[-1].rstrip('?dl=1')  # Get file name from url
+            real_path = os.path.join(folder_path, name)
+            if not os.path.exists(real_path) or retry:  # If file exists or not retry, skip it
                 print('Downloading:', real_path)
                 with open(real_path, 'ab') as data:
                     for chunk in pic_res.iter_content():
                         data.write(chunk)
+            else:
+                print('Skip:', name)
     except requests.Timeout:
         raise requests.Timeout('Timeout during downloading.')
     except (KeyError, AttributeError, globj.ResponseError) as e:

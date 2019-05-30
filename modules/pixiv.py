@@ -59,7 +59,6 @@ def get_user(se, proxy: dict) -> tuple:
     try:
         with se.get(_ROOT_URL,
                     proxies=proxy,
-                    cookies=se.cookies,
                     timeout=5) as user_res:
             user_html = BeautifulSoup(user_res.text, 'lxml')
         user_node = user_html.find('div', class_='user-name-container')
@@ -81,7 +80,6 @@ def get_following(se, proxy: dict) -> dict:
         with se.get(_ROOT_URL + 'bookmark.php',
                     params={'type': 'user'},
                     proxies=proxy,
-                    cookies=se.cookies,
                     timeout=5) as fo_res:
             fo_html = BeautifulSoup(fo_res.text, 'lxml')
         fo_node = fo_html.find_all('div', class_='userdata')
@@ -115,7 +113,6 @@ def get_new(se, proxy: dict = None, num: int = 0, user_id: str = None) -> set:
         if user_id:  # Fetch user's new illustration
             with se.get(_USER_URL + user_id + '/profile/all',
                         proxies=proxy,
-                        cookies=se.cookies,
                         timeout=5) as user_res:
                 user_json = json.loads(user_res.text)
             if user_json['error']:
@@ -135,7 +132,6 @@ def get_new(se, proxy: dict = None, num: int = 0, user_id: str = None) -> set:
                 with se.get(_ROOT_URL + 'bookmark_new_illust.php',
                             params={'p': str(p + 1)},
                             proxies=proxy,
-                            cookies=se.cookies,
                             timeout=5) as new_res:
                     new_html = BeautifulSoup(new_res.text, 'lxml')
                 new_node = new_html.find(id='js-mount-point-latest-following')
@@ -172,7 +168,6 @@ def get_detail(se, pid: str, proxy: dict = None) -> dict:
     try:
         with se.get(_ILLUST_URL + pid,
                     proxies=proxy,
-                    cookies=se.cookies,
                     timeout=5) as item_detail:
             item_json = json.loads(item_detail.text)
         if item_json['error']:
@@ -294,7 +289,6 @@ def download_pic(se, proxy: dict, item: dict, path: tuple, page: int):
             with se.get(real_url,
                         headers=header,
                         proxies=proxy,
-                        cookies=se.cookies,  # TODO: remove?
                         stream=True,
                         timeout=5) as pic_res:
                 with open(file_path, 'ab') as data:
