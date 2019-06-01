@@ -16,7 +16,14 @@ _EXHENTAI_URL = 'https://exhentai.org/'
 
 def _ban_checker(html: BeautifulSoup):
     if not html.head and 'Your IP address has been' in html.body.p.string:
-        raise globj.ValidationError(html.body.p.string)
+        msg = html.body.p.string
+        match_h = re.match(r'.*(\d{1,2}) hours', msg)
+        match_m = re.match(r'.*(\d{1,2}) minutes', msg)
+        match_s = re.match(r'.*(\d{1,2}) seconds', msg)
+        h = match_h.group(1) if match_h else 0
+        m = match_h.group(1) if match_m else 0
+        s = match_h.group(1) if match_s else 0
+        raise globj.IPBannedError(h, m, s)
 
 
 def login(se, proxy: dict, uid: str, pw: str) -> bool:
@@ -70,11 +77,11 @@ def account_info(se, proxy: dict) -> tuple:
             limit = info_node('strong')
             return limit[0].string, limit[1].string
         else:
-            raise globj.ResponseError('Abnormal response.')
+            raise globj.ResponseError
     except requests.Timeout:
         raise requests.Timeout('Timeout during fetching account info.')
-    except globj.ResponseError as e:
-        raise globj.ResponseError('Fetching account info:' + repr(e))
+    except globj.ResponseError:
+        raise globj.ResponseError('Abnormal response during fetching account info.')
 
 
 def information(se, proxy: dict, addr: str):
@@ -149,12 +156,14 @@ def fetch_keys(se, proxy: dict, addr: str, info: dict) -> dict:
 
         # Fetch showkey from first picture
         showkey_url = '/'.join(['https://exhentai.org/s', keys['1'], info['gid'] + '-1'])
+        print(showkey_url)
         with se.get(showkey_url,
                     headers={'User-Agent': random.choice(globj.GlobalVar.user_agent)},
                     proxies=proxy,
                     timeout=5) as showkey_res:
             showkey_html = BeautifulSoup(showkey_res.text, 'lxml')
         _ban_checker(showkey_html)
+        print(showkey_html.text)
         keys['0'] = re_showkey.match(showkey_html('script')[1].string).group(1)
         return keys
     except requests.Timeout:
@@ -191,9 +200,11 @@ def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, retr
         elif dl_json.get('i7'):
             url_html = BeautifulSoup(dl_json['i7'], 'lxml')  # Origin image
             origin = url_html.a['href']
-        else:
+        elif dl_json.get('i3'):
             url_html = BeautifulSoup(dl_json['i3'], 'lxml')  # Showing image is original
             origin = url_html.a.img['src']
+        else:
+            raise globj.ResponseError('No plenty elements provided.')
 
         folder_path = os.path.join(path, info['name'])
         if not os.path.exists(folder_path):
@@ -215,7 +226,7 @@ def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, retr
                 print('Skip:', name)
     except requests.Timeout:
         raise requests.Timeout('Timeout during downloading.')
-    except (KeyError, AttributeError, globj.ResponseError) as e:
+    except (AttributeError, globj.ResponseError) as e:
         raise globj.ResponseError('Downloading:' + repr(e))
 
 

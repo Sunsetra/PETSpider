@@ -292,6 +292,16 @@ class ResponseError(Exception):
         return repr(self.msg)
 
 
+class IPBannedError(ResponseError):
+    """Exception for IP banned in e-hentai."""
+
+    def __init__(self, h, m, s):
+        super().__init__('IP address has been temporarily banned.')
+        self.h = h
+        self.m = m
+        self.s = s
+
+
 class ValidationError(Exception):
     """Exception for wrong user-id or password."""
 
