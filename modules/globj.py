@@ -302,8 +302,15 @@ class IPBannedError(ResponseError):
         self.s = s
 
 
+class LimitationReachedError(ResponseError):
+    """Exception for limitation has reached."""
+
+    def __init__(self, page):
+        super().__init__(page)
+
+
 class ValidationError(Exception):
-    """Exception for wrong user-id or password."""
+    """Exception for wrong user-id or password or other error about validation."""
 
     def __init__(self, msg):
         self.msg = msg

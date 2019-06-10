@@ -1,5 +1,6 @@
 # coding:utf-8
 """E(x)hentai components."""
+# TODO: Need to add conception of proxy pool.
 import os
 import random
 import re
@@ -27,7 +28,12 @@ def _ban_checker(html: BeautifulSoup):
 
 
 def login(se, proxy: dict, uid: str, pw: str) -> bool:
-    """Login and set cookies for exhentai."""
+    """
+    Login and set cookies for exhentai.
+    Exceptions:
+        globj.ValidationError: Raised when username/pw is wrong, or have no permission to get into exhentai.
+        globj.ResponseError: Raised when server sends abnormal response(include AttributeError).
+    """
     try:
         with se.post(_LOGIN_URL,
                      params={'act': 'Login', 'CODE': '01'},
@@ -49,22 +55,24 @@ def login(se, proxy: dict, uid: str, pw: str) -> bool:
                     se.cookies.update(ex_res.cookies)  # Set cookies for exhentai
                     return True
                 else:
-                    raise globj.ValidationError('Cannot get into exhentai.')
+                    raise globj.ValidationError('Login: Cannot get into exhentai.')
         elif login_html.head.title.string == 'Log In':
-            raise globj.ValidationError('Incorrect username or password.')
+            raise globj.ValidationError('Login: Incorrect username or password.')
         else:
-            raise globj.ResponseError('Abnormal response.')
+            raise globj.ResponseError('Login: Abnormal response.')
 
     except requests.Timeout:
-        raise requests.Timeout('Timeout during login.')
-    except (globj.ResponseError, AttributeError) as e:
-        raise globj.ResponseError('Login:' + repr(e))
-    except globj.ValidationError:
-        raise
+        raise requests.Timeout('Login: Timeout.')
+    except AttributeError as e:
+        raise globj.ResponseError('Login: ' + repr(e))
 
 
 def account_info(se, proxy: dict) -> tuple:
-    """Get download limitation(used/all)."""
+    """
+    Get download limitation(used/all).
+    Exceptions:
+        globj.ResponseError: Raised when server sends abnormal response.
+    """
     try:
         with se.get(_ACCOUNT_URL,
                     headers={'User-Agent': random.choice(globj.GlobalVar.user_agent)},
@@ -77,20 +85,20 @@ def account_info(se, proxy: dict) -> tuple:
             limit = info_node('strong')
             return limit[0].string, limit[1].string
         else:
-            raise globj.ResponseError
+            raise globj.ResponseError('Account_info: Abnormal response.')
     except requests.Timeout:
-        raise requests.Timeout('Timeout during fetching account info.')
-    except globj.ResponseError:
-        raise globj.ResponseError('Abnormal response during fetching account info.')
+        raise requests.Timeout('Account_info: Timeout.')
 
 
-def information(se, proxy: dict, addr: str):
+def information(se, proxy: dict, addr: str) -> dict:
     """
     Fetch gallery information, include misc info and thumbnail.
     Args:
         se: Session instance.
         proxy: (Optional) The proxy used.
         addr: Gallery address.
+    Exceptions:
+        globj.ResponseError: Raised when server sends abnormal response.
     """
     re_thumb = re.compile(r'.*url\((.*)\).*')
     # TODO: address = addr + '/' if addr[-1] != '/' else addr  # When the end of gallery addr is not /
@@ -116,11 +124,12 @@ def information(se, proxy: dict, addr: str):
                 'thumb': thumb
             }
         else:
-            raise globj.ResponseError('Abnormal response.')
+            raise globj.ResponseError('Information: Abnormal response.')
+
     except requests.Timeout:
-        raise requests.Timeout('Timeout during fetching gallery info.')
-    except (AttributeError, globj.ResponseError) as e:
-        raise globj.ResponseError('Fetching gallery info:' + repr(e))
+        raise requests.Timeout('Information: Timeout.')
+    except AttributeError as e:
+        raise globj.ResponseError('Information: ' + repr(e))
 
 
 def fetch_keys(se, proxy: dict, addr: str, info: dict) -> dict:
@@ -133,6 +142,8 @@ def fetch_keys(se, proxy: dict, addr: str, info: dict) -> dict:
         info: Information of the gallery.
     Return:
         A dictionary. {'page': imgkey, '0': showkey}
+    Exceptions:
+        globj.ResponseError: Raised when server sends abnormal response.
     """
     re_imgkey = re.compile(r'https://exhentai\.org/s/(\w{10})/\d*-(\d{1,4})')
     re_showkey = re.compile(r'[\S\s]*showkey="(\w{11})"[\S\s]*')
@@ -156,20 +167,19 @@ def fetch_keys(se, proxy: dict, addr: str, info: dict) -> dict:
 
         # Fetch showkey from first picture
         showkey_url = '/'.join(['https://exhentai.org/s', keys['1'], info['gid'] + '-1'])
-        print(showkey_url)
         with se.get(showkey_url,
                     headers={'User-Agent': random.choice(globj.GlobalVar.user_agent)},
                     proxies=proxy,
                     timeout=5) as showkey_res:
             showkey_html = BeautifulSoup(showkey_res.text, 'lxml')
         _ban_checker(showkey_html)
-        print(showkey_html.text)
         keys['0'] = re_showkey.match(showkey_html('script')[1].string).group(1)
         return keys
+
     except requests.Timeout:
-        raise requests.Timeout('Timeout during fetching keys.')
+        raise requests.Timeout('Fetch_keys: Timeout.')
     except AttributeError as e:
-        raise globj.ResponseError('Fetching gallery keys:' + repr(e))
+        raise globj.ResponseError('Fetch_keys: ' + repr(e))
 
 
 def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, retry=False):
@@ -183,6 +193,9 @@ def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, retr
         page: Page number.
         path: Save root path.
         retry: Overwrite image instead of skipping it.
+    Exceptions:
+        globj.ResponseError: Raised when server sends abnormal response.
+        globj.LimitationReachedError: Raised when reach view limitation.
     """
     try:
         with se.post(_EXHENTAI_URL + 'api.php',
@@ -195,16 +208,22 @@ def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, retr
                      proxies=proxy,
                      timeout=5) as dl_res:  # Fetch original url of picture
             dl_json = dl_res.json()
-        if dl_json.get('error'):
-            raise globj.ResponseError(dl_json['error'])
-        elif dl_json.get('i7'):
+
+        if dl_json.get('error'):  # Wrong imgkey or showkey
+            raise globj.ResponseError('Download: ' + dl_json['error'])
+        if dl_json.get('i3'):  # Whether Reach limitation
+            url_html = BeautifulSoup(dl_json['i3'], 'lxml')
+            if url_html.a.img['src'] == 'https://exhentai.org/img/509.gif':
+                raise globj.LimitationReachedError(page)
+
+        if dl_json.get('i7'):
             url_html = BeautifulSoup(dl_json['i7'], 'lxml')  # Origin image
             origin = url_html.a['href']
         elif dl_json.get('i3'):
             url_html = BeautifulSoup(dl_json['i3'], 'lxml')  # Showing image is original
             origin = url_html.a.img['src']
         else:
-            raise globj.ResponseError('No plenty elements provided.')
+            raise globj.ResponseError('Download: No plenty elements.')
 
         folder_path = os.path.join(path, info['name'])
         if not os.path.exists(folder_path):
@@ -215,6 +234,9 @@ def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, retr
                     proxies=proxy,
                     stream=True,
                     timeout=5) as pic_res:
+            url = pic_res.url
+            if url.split('/')[2] == 'exhentai.org':  # If response cannot redirect(302), raise exception
+                raise globj.LimitationReachedError(page)
             name = os.path.split(pic_res.url)[-1].rstrip('?dl=1')  # Get file name from url
             real_path = os.path.join(folder_path, name)
             if not os.path.exists(real_path) or retry:  # If file exists or not retry, skip it
@@ -225,9 +247,9 @@ def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, retr
             else:
                 print('Skip:', name)
     except requests.Timeout:
-        raise requests.Timeout('Timeout during downloading.')
-    except (AttributeError, globj.ResponseError) as e:
-        raise globj.ResponseError('Downloading:' + repr(e))
+        raise requests.Timeout('Download: Timeout.')
+    except AttributeError as e:
+        raise globj.ResponseError('Download: ' + repr(e))
 
 
 if __name__ == '__main__':
