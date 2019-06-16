@@ -1,5 +1,5 @@
 # coding:utf-8
-"""GUI components of Pixiv tab."""
+"""GUI components for Pixiv tab."""
 import os
 import re
 from functools import partial
@@ -69,7 +69,7 @@ class LoginWidget(QWidget):
     def login(self):
         """
         Login behavior.
-        If cookies in setting is not NULL, test it by fetching following,
+        If cookies in setting is not NULL, test it by fetching user's info,
         or login by username and password.
         """
         self.set_disabled(True)
@@ -421,6 +421,7 @@ class MainWidget(QWidget):
         self.setLayout(vlay_main)
 
     def change_stat(self, bid):
+        """Change states of three exclusive buttons by bid."""
         func = {1: self.new_stat,
                 2: self.pid_stat,
                 3: self.uid_stat}
@@ -454,6 +455,7 @@ class MainWidget(QWidget):
         self.ledit_num.setDisabled(False)
 
     def tabulate(self, items):
+        """Construct list of items."""
         self.table_viewer.setSortingEnabled(False)
         self.table_viewer.clearContents()
         self.table_viewer.setRowCount(len(items))
@@ -540,6 +542,7 @@ class MainWidget(QWidget):
         self.thumbnail.setPixmap(thumb)
 
     def change_thumb(self, new):
+        """Change state of whether show thumbnail in setting."""
         self.show_thumb_flag = new
         if self.show_thumb_flag:
             self.thumbnail.show()
@@ -547,6 +550,7 @@ class MainWidget(QWidget):
             self.thumbnail.hide()
 
     def set_default_thumb(self):
+        """Set default thumbnail when no item selected."""
         if not self.table_viewer.selectedItems() and self.show_thumb_flag:
             self.thumbnail.setPixmap(self.thumb_default)
 
@@ -583,12 +587,14 @@ class MainWidget(QWidget):
         self.thread_pool.clear()
 
     def except_download(self, *args):
+        """Cancel download threads when exceptions raised."""
         self.cancel_download()
         if not self.except_info:
             self.except_info = args
             self.ATC_monitor.start()
 
     def except_checker(self):
+        """Check whether all thread in pool has ended."""
         if not self.thread_pool.activeThreadCount():
             self.ATC_monitor.stop()
             globj.show_messagebox(*self.except_info)
@@ -598,6 +604,7 @@ class MainWidget(QWidget):
             self.btn_dl.clicked.connect(self.download)
 
     def finish_download(self):
+        """Do some clearing stuff when thread has finished."""
         print('线程结束:', self.thread_pool.activeThreadCount())
         if not self.thread_pool.activeThreadCount():
             if self.cancel_download_flag:

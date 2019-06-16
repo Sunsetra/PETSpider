@@ -182,7 +182,7 @@ def fetch_keys(se, proxy: dict, addr: str, info: dict) -> dict:
         raise globj.ResponseError('Fetch_keys: ' + repr(e))
 
 
-def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, retry=False):
+def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, rename=False, rewrite=False):
     """
     Download one picture.
     Args:
@@ -192,7 +192,8 @@ def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, retr
         keys: Keys include imgkeys and showkey.
         page: Page number.
         path: Save root path.
-        retry: Overwrite image instead of skipping it.
+        rename: Control whether rename to origin name/image number.
+        rewrite: Overwrite image instead of skipping it.
     Exceptions:
         globj.ResponseError: Raised when server sends abnormal response.
         globj.LimitationReachedError: Raised when reach view limitation.
@@ -238,8 +239,10 @@ def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, retr
             if url.split('/')[2] == 'exhentai.org':  # If response cannot redirect(302), raise exception
                 raise globj.LimitationReachedError(page)
             name = os.path.split(pic_res.url)[-1].rstrip('?dl=1')  # Get file name from url
+            if rename:
+                name = str(page) + os.path.splitext(name)[1]
             real_path = os.path.join(folder_path, name)
-            if not os.path.exists(real_path) or retry:  # If file exists or not retry, skip it
+            if not os.path.exists(real_path) or rewrite:  # If file exists or not rewrite, skip it
                 print('Downloading:', real_path)
                 with open(real_path, 'ab') as data:
                     for chunk in pic_res.iter_content():

@@ -2,6 +2,7 @@
 """A crawler for Pixiv, E-hentai and twitter."""
 import os
 import sys
+from functools import partial
 from multiprocessing import freeze_support
 
 import requests
@@ -11,7 +12,7 @@ from PyQt5.QtWidgets import QAction, QApplication, QMainWindow, QTabWidget, QMes
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
 
-from modules import globj, pixiv_gui, pixiv
+from modules import globj, pixiv_gui, pixiv, ehentai_gui
 
 
 class MainWindow(QMainWindow):
@@ -30,8 +31,11 @@ class MainWindow(QMainWindow):
         self.pixiv_main = None  # Pixiv main page
         self.pixiv_icon = QIcon(os.path.join(bundle_dir, 'icon', 'pixiv.png'))
 
-        self.ehentai_wid = None
-        self.ehentai_var = None
+        self.ehentai_var = None  # Ehentai global vars
+        self.ehentai_login = None  # Ehentai login page
+        self.ehentai_main = None  # Ehentai main page
+        self.ehentai_icon = QIcon(os.path.join(bundle_dir, 'icon', 'ehentai.png'))
+
         self.twitter_wid = None
         self.twitter_var = None
 
@@ -67,6 +71,8 @@ class MainWindow(QMainWindow):
         rule_setting.triggered.connect(self.rule_setting_dialog)
 
         self.tab_login('pixiv')
+        self.tab_login('ehentai')
+        self.tab_widget.setCurrentIndex(0)
 
         self.frameGeometry().moveCenter(self.resolution.center())  # Open at middle of screen
         self.setWindowTitle('PETSpider')
@@ -97,6 +103,13 @@ class MainWindow(QMainWindow):
             self.pixiv_main.logout_sig.connect(self.tab_login)
             self.tab_widget.removeTab(0)
             self.tab_widget.insertTab(0, self.pixiv_main, self.pixiv_icon, 'Pixiv')
+            self.tab_widget.setCurrentIndex(0)
+        if tab == 'ehentai':
+            self.ehentai_main = ehentai_gui.MainWidget(self.ehentai_var, info)
+            self.ehentai_main.logout_sig.connect(self.tab_login)
+            self.tab_widget.removeTab(0)
+            self.tab_widget.insertTab(0, self.ehentai_main, self.ehentai_icon, 'Ehentai')
+            self.tab_widget.setCurrentIndex(0)
 
     def tab_login(self, tab: str):
         """Switch tab widget to login page."""
@@ -107,6 +120,14 @@ class MainWindow(QMainWindow):
             self.pixiv_login.login_success.connect(self.tab_logout)
             self.tab_widget.removeTab(0)
             self.tab_widget.insertTab(0, self.pixiv_login, self.pixiv_icon, 'Pixiv')
+            self.tab_widget.setCurrentIndex(0)
+        if tab == 'ehentai':
+            self.ehentai_var = self.init_var()
+            self.ehentai_login = ehentai_gui.LoginWidget(self.ehentai_var)
+            self.ehentai_login.login_success.connect(partial(print, '登陆成功！'))
+            self.tab_widget.removeTab(1)
+            self.tab_widget.insertTab(1, self.ehentai_login, self.ehentai_icon, 'Ehentai')
+            self.tab_widget.setCurrentIndex(1)
 
     def clear_cookies(self):
         self.settings.beginGroup('Cookies')
