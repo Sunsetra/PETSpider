@@ -413,6 +413,8 @@ class MainWidget(QWidget):
         splitter.setHandleWidth(3)
         splitter.addWidget(left_wid)
         splitter.addWidget(right_wid)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 0)
         splitter.handle(1).setDisabled(True)
 
         vlay_main = QVBoxLayout()
@@ -786,7 +788,10 @@ class SaveRuleSettingTab(QWidget):
         self.previewer()
 
     def previewer(self):
-        path = self.root_path.replace('/', '\\')
+        if globj.PLATFORM == 'Windows':
+            path = self.root_path.replace('/', '\\')
+        else:
+            path = self.root_path
         for i in range(len(self.folder_rule)):
             path = os.path.join(path, self.cbox_folder_list[i].currentText())
         all_name = [self.cbox_file_list[i].currentText() for i in range(len(self.file_rule))]

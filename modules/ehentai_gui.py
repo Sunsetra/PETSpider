@@ -5,8 +5,8 @@ from functools import partial
 
 import requests
 from PyQt5.QtCore import Qt, QSettings, QThread, pyqtSignal
-from PyQt5.QtWidgets import (QVBoxLayout, QFormLayout, QWidget, QGroupBox, QLineEdit, QPushButton, QCheckBox,
-                             QMessageBox)
+from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QFormLayout, QWidget, QGroupBox, QLineEdit, QPushButton,
+                             QCheckBox, QLabel, QSplitter, QFileDialog, QMessageBox)
 
 from modules import globj, ehentai
 
@@ -167,3 +167,112 @@ class MainWidget(QWidget):
         super().__init__()
         self.glovar = glovar
         self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
+
+        self.ledit_addr = globj.LineEditor()
+        self.cbox_rename = QCheckBox('按序号重命名')
+        self.cbox_rename.setToolTip('勾选后将以图片在画廊中的序号重命名而非使用原图片名。')
+        self.btn_get = QPushButton('获取信息')
+        self.btn_dl = QPushButton('下载')
+
+        self.user_info = QLabel('下载限额：{0}/{1}'.format(info[0], info[1]))
+        self.btn_refresh = QPushButton('刷新限额')
+        self.btn_logout = QPushButton('退出登陆')
+
+        self.init_ui()
+
+    def init_ui(self):
+        hlay_addr = QHBoxLayout()
+        hlay_addr.addWidget(QLabel('画廊地址'))
+        hlay_addr.addWidget(self.ledit_addr)
+        hlay_addr.setStretch(0, 0)
+        hlay_cbox = QHBoxLayout()
+        hlay_cbox.addWidget(self.cbox_rename)
+        hlay_cbox.setAlignment(Qt.AlignLeft)
+        hlay_acts = QHBoxLayout()
+        hlay_acts.addStretch(1)
+        hlay_acts.addWidget(self.btn_get)
+        hlay_acts.addWidget(self.btn_dl)
+        hlay_acts.addStretch(1)
+
+        vlay_left = QVBoxLayout()
+        vlay_left.addLayout(hlay_addr)
+        vlay_left.addLayout(hlay_cbox)
+        vlay_left.addLayout(hlay_acts)
+        left_wid = QWidget()
+        left_wid.setLayout(vlay_left)
+
+        vlay_right = QVBoxLayout()
+        vlay_right.addWidget(self.user_info, alignment=Qt.AlignHCenter)
+        vlay_right.addWidget(self.btn_refresh)
+        vlay_right.addWidget(self.btn_logout)
+        right_wid = QWidget()
+        right_wid.setLayout(vlay_right)
+
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setHandleWidth(3)
+        splitter.addWidget(left_wid)
+        splitter.addWidget(right_wid)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 0)
+        splitter.handle(1).setDisabled(True)
+
+        vlay_main = QVBoxLayout()
+        vlay_main.addWidget(splitter)
+        self.setLayout(vlay_main)
+
+
+class SaveRuleSettingTab(QWidget):
+
+    def __init__(self, settings):
+        super().__init__()
+        self.settings = settings
+        self.root_path = None
+        self.ledit_prev = globj.LineEditor()
+        self.ledit_prev.setReadOnly(True)
+        self.ledit_prev.setContextMenuPolicy(Qt.NoContextMenu)
+
+        self.restore()
+        self.init_ui()
+
+    def init_ui(self):
+        btn_root = QPushButton('浏览')
+        btn_root.clicked.connect(self.choose_dir)
+
+        hlay_root = QHBoxLayout()
+        hlay_root.addWidget(QLabel('根目录'))
+        hlay_root.addWidget(btn_root)
+
+        vlay_ehentai = QVBoxLayout()
+        vlay_ehentai.addLayout(hlay_root)
+        vlay_ehentai.addWidget(self.ledit_prev)
+        vlay_ehentai.setAlignment(Qt.AlignTop)
+        self.setLayout(vlay_ehentai)
+        self.setMinimumSize(self.sizeHint())
+
+    def choose_dir(self):
+        self.settings.beginGroup('RuleSetting')
+        setting_root_path = self.settings.value('ehentai_root_path', os.path.abspath('.'))
+        root_path = QFileDialog.getExistingDirectory(self, '选择目录', setting_root_path)
+        self.settings.endGroup()
+        if root_path:  # When click Cancel, root_path is None
+            self.root_path = root_path
+            self.previewer()
+
+    def previewer(self):
+        if globj.PLATFORM == 'Windows':
+            root_path = self.root_path.replace('/', '\\')
+        else:
+            root_path = self.root_path
+        self.ledit_prev.setText(root_path)
+
+    def store(self):
+        self.settings.beginGroup('RuleSetting')
+        self.settings.setValue('ehentai_root_path', self.root_path)
+        self.settings.sync()
+        self.settings.endGroup()
+
+    def restore(self):
+        self.settings.beginGroup('RuleSetting')
+        self.root_path = self.settings.value('ehentai_root_path', os.path.abspath('.'))
+        self.settings.endGroup()
+        self.previewer()

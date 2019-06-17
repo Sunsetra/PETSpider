@@ -9,11 +9,11 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (QWidget, QLineEdit, QGroupBox, QPushButton, QCheckBox, QMessageBox, QTabWidget,
                              QDoubleSpinBox, QSpinBox, QFormLayout, QHBoxLayout, QVBoxLayout, QGridLayout, QMenu)
 
-from modules import pixiv_gui
+from modules import pixiv_gui, ehentai_gui
 
 _RE_SYMBOL = re.compile(r'[/\\|*?<>":]')
 _RE_PROXY = re.compile(r'.*:([1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{4}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')
-_PLATFORM = platform.system()
+PLATFORM = platform.system()
 
 
 class GlobalVar(object):
@@ -66,12 +66,14 @@ class MiscSettingDialog(QWidget):
         self.ledit_https = LineEditor()  # Https proxy
 
         self.sbox_simi = QDoubleSpinBox()
+        self.sbox_simi.setToolTip('只有相似度高于该值的识图结果会被显示。')
         self.sbox_simi.setContextMenuPolicy(Qt.NoContextMenu)
         self.sbox_simi.setRange(0, 100)
         self.sbox_simi.setSingleStep(0.5)
         self.sbox_simi.setDecimals(2)
         self.sbox_simi.setSuffix(' %')
         self.sbox_dlcount = QSpinBox()
+        self.sbox_dlcount.setToolTip('可同时下载的图片数，过大可能会导致连接中断或IP被ban。')
         self.sbox_dlcount.setContextMenuPolicy(Qt.NoContextMenu)
         self.sbox_dlcount.setRange(1, 5)
         self.sbox_dlcount.setWrapping(True)
@@ -213,11 +215,14 @@ class SaveRuleDialog(QWidget):
         self.setWindowFlags(Qt.CustomizeWindowHint | Qt.WindowCloseButtonHint)
         self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
         self.pixiv_tab = pixiv_gui.SaveRuleSettingTab(self.settings)
+        self.ehentai_tab = ehentai_gui.SaveRuleSettingTab(self.settings)
         self.init_ui()
 
     def init_ui(self):
         main_wid = QTabWidget()
         main_wid.addTab(self.pixiv_tab, 'Pixiv')
+        main_wid.addTab(self.ehentai_tab, 'Ehentai')
+        main_wid.setCurrentIndex(0)
         main_wid.setMinimumWidth(self.pixiv_tab.size().width())
 
         btn_ok = QPushButton('确定', self)
@@ -242,6 +247,7 @@ class SaveRuleDialog(QWidget):
 
     def store(self):
         self.pixiv_tab.store()
+        self.ehentai_tab.store()
         self.close()
 
     def keyPressEvent(self, k):
@@ -337,7 +343,7 @@ def name_verify(name: str, default: str = 'NoName') -> str:
     Returns:
         A legal string for file/folder name.
     """
-    if _PLATFORM == 'Windows':
+    if PLATFORM == 'Windows':
         illegal_name = {'con', 'aux', 'nul', 'prn', 'com0', 'com1', 'com2', 'com3', 'com4', 'com5', 'com6', 'com7',
                         'com8', 'com9', 'lpt0', 'lpt1', 'lpt2', 'lpt3', 'lpt4', 'lpt5', 'lpt6', 'lpt7', 'lpt8', 'lpt9'}
         step1 = _RE_SYMBOL.sub('', name)  # Remove illegal symbol
@@ -345,7 +351,7 @@ def name_verify(name: str, default: str = 'NoName') -> str:
         if step2 in illegal_name or not step2:
             return default
         return step2
-    elif _PLATFORM == 'Linux':
+    elif PLATFORM == 'Linux':
         step1 = name.replace('/', '')  # Remove illegal '/'
         step2 = step1.lstrip('.')  # Remove '.' at the beginning
         if not step2:

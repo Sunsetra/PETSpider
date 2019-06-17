@@ -2,7 +2,6 @@
 """A crawler for Pixiv, E-hentai and twitter."""
 import os
 import sys
-from functools import partial
 from multiprocessing import freeze_support
 
 import requests
@@ -107,9 +106,9 @@ class MainWindow(QMainWindow):
         if tab == 'ehentai':
             self.ehentai_main = ehentai_gui.MainWidget(self.ehentai_var, info)
             self.ehentai_main.logout_sig.connect(self.tab_login)
-            self.tab_widget.removeTab(0)
-            self.tab_widget.insertTab(0, self.ehentai_main, self.ehentai_icon, 'Ehentai')
-            self.tab_widget.setCurrentIndex(0)
+            self.tab_widget.removeTab(1)
+            self.tab_widget.insertTab(1, self.ehentai_main, self.ehentai_icon, 'Ehentai')
+            self.tab_widget.setCurrentIndex(1)
 
     def tab_login(self, tab: str):
         """Switch tab widget to login page."""
@@ -124,7 +123,7 @@ class MainWindow(QMainWindow):
         if tab == 'ehentai':
             self.ehentai_var = self.init_var()
             self.ehentai_login = ehentai_gui.LoginWidget(self.ehentai_var)
-            self.ehentai_login.login_success.connect(partial(print, '登陆成功！'))
+            self.ehentai_login.login_success.connect(self.tab_logout)
             self.tab_widget.removeTab(1)
             self.tab_widget.insertTab(1, self.ehentai_login, self.ehentai_icon, 'Ehentai')
             self.tab_widget.setCurrentIndex(1)
