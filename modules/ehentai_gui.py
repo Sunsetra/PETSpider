@@ -1,12 +1,15 @@
 # coding:utf-8
 """GUI components for Ehentai tab."""
 import os
+import re
 from functools import partial
 
 import requests
 from PyQt5.QtCore import Qt, QSettings, QThread, pyqtSignal
+from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QFormLayout, QWidget, QGroupBox, QLineEdit, QPushButton,
-                             QCheckBox, QLabel, QSplitter, QFileDialog, QMessageBox)
+                             QCheckBox, QLabel, QSplitter, QFileDialog, QFrame, QMessageBox, QTableWidget, QHeaderView,
+                             QAbstractItemView)
 
 from modules import globj, ehentai
 
@@ -154,10 +157,57 @@ class VerifyThread(QThread):
                 requests.exceptions.Timeout,
                 requests.exceptions.ConnectionError) as e:
             self.except_signal.emit(self.parent, QMessageBox.Warning, '连接失败', '请检查网络或使用代理。\n' + repr(e))
-        except globj.ResponseError:
-            self.except_signal.emit(self.parent, QMessageBox.Critical, '登陆失败', '请尝试清除cookies重新登陆。')
+        except globj.IPBannedError as e:
+            self.except_signal.emit(self.parent, QMessageBox.Critical, 'IP被封禁',
+                                    '当前IP已被封禁，将在{0}小时{1}分{2}秒后解封。'.format(e.args[0], e.args[1], e.args[2]))
+        except globj.ResponseError as e:
+            self.except_signal.emit(self.parent, QMessageBox.Critical,
+                                    '未知错误', '返回值错误，请向开发者反馈\n{0}'.format(repr(e)))
         else:
             self.verify_success.emit(info)
+
+
+class FetchInfoThread(QThread):
+    fetch_success = pyqtSignal(dict)
+    except_signal = pyqtSignal(object, int, str, str)
+
+    def __init__(self, parent, session, proxy: dict, addr: str):
+        super().__init__()
+        self.parent = parent
+        self.session = session
+        self.proxy = proxy
+        self.addr = addr
+
+    def run(self):
+        try:
+            info = ehentai.information(self.session, self.proxy, self.addr)
+        except (requests.exceptions.ProxyError,
+                requests.exceptions.Timeout,
+                requests.exceptions.ConnectionError) as e:
+            self.except_signal.emit(self.parent, QMessageBox.Warning, '连接失败', '请检查网络或使用代理。\n' + repr(e))
+        except globj.IPBannedError as e:
+            self.except_signal.emit(self.parent, QMessageBox.Critical, 'IP被封禁',
+                                    '当前IP已被封禁，将在{0}小时{1}分{2}秒后解封。'.format(e.args[0], e.args[1], e.args[2]))
+        except globj.ResponseError as e:
+            self.except_signal.emit(self.parent, QMessageBox.Critical,
+                                    '未知错误', '返回值错误，请向开发者反馈\n{0}'.format(repr(e)))
+        else:
+            self.fetch_success.emit(info)
+
+
+class DownloadThumbThread(QThread):
+    download_success = pyqtSignal(str)
+
+    def __init__(self, session, proxy, addr):
+        super().__init__()
+        self.session = session
+        self.proxy = proxy
+        self.addr = addr
+
+    def run(self):
+        path = ehentai.download_thumb(self.session, self.proxy, self.addr)
+        if path:
+            self.download_success.emit(path)
 
 
 class MainWidget(QWidget):
@@ -167,16 +217,54 @@ class MainWidget(QWidget):
         super().__init__()
         self.glovar = glovar
         self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
+        self.refresh_thread = None
+        self.fetch_thread = None
+        self.thumb_thread = None
 
         self.ledit_addr = globj.LineEditor()
         self.cbox_rename = QCheckBox('按序号重命名')
         self.cbox_rename.setToolTip('勾选后将以图片在画廊中的序号重命名而非使用原图片名。')
         self.btn_get = QPushButton('获取信息')
-        self.btn_dl = QPushButton('下载')
+        self.btn_get.clicked.connect(self.fetch_info)
+        self.btn_add = QPushButton('加入队列')
+        self.btn_del = QPushButton('移除选定')
+        self.btn_start = QPushButton('开始队列')
 
         self.user_info = QLabel('下载限额：{0}/{1}'.format(info[0], info[1]))
         self.btn_refresh = QPushButton('刷新限额')
+        self.btn_refresh.clicked.connect(self.refresh)
         self.btn_logout = QPushButton('退出登陆')
+        self.btn_logout.clicked.connect(self.logout_fn)
+
+        self.thumbnail = QLabel()
+        self.thumbnail.setFrameShape(QFrame.StyledPanel)
+        self.thumbnail.setAlignment(Qt.AlignCenter)
+        self.thumb_default = QPixmap(os.path.join(self.glovar.home, 'icon', 'ehentai.png'))
+        self.thumb_default = self.thumb_default.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.settings.beginGroup('MiscSetting')
+        self.show_thumb_flag = int(self.settings.value('thumbnail', True))
+        self.settings.endGroup()
+
+        self.info = QLabel()
+        self.info.setFrameShape(QFrame.StyledPanel)
+        self.info.setFixedWidth(250)
+        self.info.setAlignment(Qt.AlignTop)
+        self.info.setWordWrap(True)
+        self.info.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.info.setContextMenuPolicy(Qt.NoContextMenu)
+
+        self.que = QTableWidget()
+        self.que.setWordWrap(False)
+        self.que.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.que.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.que.verticalScrollBar().setContextMenuPolicy(Qt.NoContextMenu)
+        self.que.setColumnCount(3)
+        self.que.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        self.que.setHorizontalHeaderLabels(['画廊名', '大小', '页数'])
+        self.que.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.que.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.que.horizontalHeader().setStyleSheet('QHeaderView::section{background-color:#E3E0D1;}')
+        self.que.horizontalHeader().setHighlightSections(False)
 
         self.init_ui()
 
@@ -191,7 +279,9 @@ class MainWidget(QWidget):
         hlay_acts = QHBoxLayout()
         hlay_acts.addStretch(1)
         hlay_acts.addWidget(self.btn_get)
-        hlay_acts.addWidget(self.btn_dl)
+        hlay_acts.addWidget(self.btn_add)
+        hlay_acts.addWidget(self.btn_del)
+        hlay_acts.addWidget(self.btn_start)
         hlay_acts.addStretch(1)
 
         vlay_left = QVBoxLayout()
@@ -216,9 +306,78 @@ class MainWidget(QWidget):
         splitter.setStretchFactor(1, 0)
         splitter.handle(1).setDisabled(True)
 
+        vlay_info = QVBoxLayout()
+        vlay_info.addWidget(self.thumbnail)
+        vlay_info.addWidget(self.info)
+
+        hlay_down = QHBoxLayout()
+        hlay_down.addLayout(vlay_info)
+        hlay_down.addWidget(self.que)
+
         vlay_main = QVBoxLayout()
         vlay_main.addWidget(splitter)
+        vlay_main.addLayout(hlay_down)
         self.setLayout(vlay_main)
+
+        self.thumbnail.setFixedHeight(left_wid.sizeHint().height())
+        self.thumbnail.setFixedWidth(250)
+        self.thumbnail.setFixedHeight(360)
+        self.thumbnail.setPixmap(self.thumb_default)
+        if self.show_thumb_flag:  # Cannot put code after show(), or flick
+            self.thumbnail.show()
+        else:
+            self.thumbnail.hide()
+
+    def fetch_info(self):
+        self.btn_get.setDisabled(True)
+        origin = self.ledit_addr.text().strip()
+        addr = origin + '/' if origin[-1] != '/' else origin
+        if re.match(r'(https?://)?e[x-]hentai.org/g/\d{1,7}/\w{10}/', addr):
+            self.fetch_thread = FetchInfoThread(self, self.glovar.session, self.glovar.proxy, addr)
+            self.fetch_thread.fetch_success.connect(self.update_info)
+            self.fetch_thread.except_signal.connect(globj.show_messagebox)
+            self.fetch_thread.finished.connect(partial(self.btn_get.setDisabled, False))
+            self.fetch_thread.start()
+        else:
+            globj.show_messagebox(self, QMessageBox.Warning, '错误', '画廊地址输入错误！')
+            self.btn_get.setDisabled(False)
+
+    def update_info(self, info: dict):
+        if self.show_thumb_flag:
+            self.thumb_thread = DownloadThumbThread(self.glovar.session, self.glovar.proxy, info['thumb'])
+            self.thumb_thread.download_success.connect(self.show_thumb)
+            self.thumb_thread.start()
+        # Set min height to 0 before text changed to avoid unchangeable sizeHint
+        self.info.setMinimumHeight(0)
+        self.info.setText(info['name'] + '\n大小：' + info['size'] + '\n页数：' + str(info['page']))
+        self.info.setMinimumHeight(self.info.sizeHint().height())  # Set to sizeHint to change height autometically
+
+    def show_thumb(self, path: str):
+        self.thumbnail.setPixmap(QPixmap(path))
+
+    def refresh(self):
+        self.btn_refresh.setDisabled(True)
+        self.refresh_thread = VerifyThread(self, self.glovar.session, self.glovar.proxy)
+        self.refresh_thread.verify_success.connect(self.refresh_info)
+        self.refresh_thread.except_signal.connect(globj.show_messagebox)
+        self.refresh_thread.finished.connect(partial(self.btn_refresh.setDisabled, False))
+        self.refresh_thread.start()
+
+    def refresh_info(self, info: tuple):
+        self.user_info.setText('下载限额：{0}/{1}'.format(info[0], info[1]))
+
+    def change_thumb(self, new):
+        """Change state of whether show thumbnail in setting."""
+        self.show_thumb_flag = new
+        if self.show_thumb_flag:
+            self.thumbnail.show()
+        else:
+            self.thumbnail.hide()
+
+    def logout_fn(self) -> bool:
+        self.btn_logout.setDisabled(True)
+        self.logout_sig.emit('ehentai')
+        return True
 
 
 class SaveRuleSettingTab(QWidget):

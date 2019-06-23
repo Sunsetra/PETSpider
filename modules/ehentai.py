@@ -4,6 +4,7 @@
 import os
 import random
 import re
+from tempfile import NamedTemporaryFile
 
 import requests
 from bs4 import BeautifulSoup
@@ -18,12 +19,12 @@ _EXHENTAI_URL = 'https://exhentai.org/'
 def _ban_checker(html: BeautifulSoup):
     if not html.head and 'Your IP address has been' in html.body.p.string:
         msg = html.body.p.string
-        match_h = re.match(r'.*(\d{1,2}) hours', msg)
-        match_m = re.match(r'.*(\d{1,2}) minutes', msg)
-        match_s = re.match(r'.*(\d{1,2}) seconds', msg)
+        match_h = re.match(r'.* (\d{1,2}) hours', msg)
+        match_m = re.match(r'.* (\d{1,2}) minutes', msg)
+        match_s = re.match(r'.* (\d{1,2}) seconds', msg)
         h = match_h.group(1) if match_h else 0
-        m = match_h.group(1) if match_m else 0
-        s = match_h.group(1) if match_s else 0
+        m = match_m.group(1) if match_m else 0
+        s = match_s.group(1) if match_s else 0
         raise globj.IPBannedError(h, m, s)
 
 
@@ -50,7 +51,6 @@ def login(se, proxy: dict, uid: str, pw: str) -> bool:
                         headers={'User-Agent': random.choice(globj.GlobalVar.user_agent)},
                         timeout=5) as ex_res:
                 ex_html = BeautifulSoup(ex_res.text, 'lxml')
-                _ban_checker(ex_html)
                 if ex_html.head.title.string == 'ExHentai.org':
                     se.cookies.update(ex_res.cookies)  # Set cookies for exhentai
                     return True
@@ -101,7 +101,6 @@ def information(se, proxy: dict, addr: str) -> dict:
         globj.ResponseError: Raised when server sends abnormal response.
     """
     re_thumb = re.compile(r'.*url\((.*)\).*')
-    # TODO: address = addr + '/' if addr[-1] != '/' else addr  # When the end of gallery addr is not /
     try:
         with se.get(addr,
                     params={'inline_set': 'ts_m'},
@@ -253,6 +252,25 @@ def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, rena
         raise requests.Timeout('Download: Timeout.')
     except AttributeError as e:
         raise globj.ResponseError('Download: ' + repr(e))
+
+
+def download_thumb(se, proxy: dict, addr: str) -> str:
+    """Download thumbnail to a temp folder."""
+    header = {'User-Agent': random.choice(globj.GlobalVar.user_agent)}
+    try:
+        with se.get(addr,
+                    headers=header,
+                    proxies=proxy,
+                    stream=True,
+                    timeout=5) as thumb_res:
+            with NamedTemporaryFile('w+b', prefix='PETSpider_', delete=False) as thumb:
+                for chunk in thumb_res.iter_content():
+                    thumb.write(chunk)
+                path = thumb.name
+    except (OSError, IOError):
+        return ''
+    else:
+        return path
 
 
 if __name__ == '__main__':

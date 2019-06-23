@@ -493,13 +493,13 @@ class MainWidget(QWidget):
         self.table_viewer.setSortingEnabled(True)
 
     def fetch_new(self):
+        self.btn_get.setDisabled(True)
+        self.btn_dl.setDisabled(True)
         pid = self.ledit_pid.text().strip()
         uid = self.ledit_uid.text().strip()
         num = self.ledit_num.value() if self.ledit_num.value() else 0
         if pid or uid:
             if re.match(r'^\d{2,9}$', pid) or re.match(r'^\d{2,9}$', uid):
-                self.btn_get.setDisabled(True)
-                self.btn_dl.setDisabled(True)
                 self.fetch_thread = FetchThread(self, self.glovar.session, self.glovar.proxy, pid, uid, num)
                 self.fetch_thread.fetch_success.connect(self.tabulate)
                 self.fetch_thread.except_signal.connect(globj.show_messagebox)
@@ -507,9 +507,9 @@ class MainWidget(QWidget):
                 self.fetch_thread.start()
             else:
                 globj.show_messagebox(self, QMessageBox.Warning, '错误', 'ID号输入错误！')
+                self.btn_get.setDisabled(False)
+                self.btn_dl.setDisabled(False)
         elif num:
-            self.btn_get.setDisabled(True)
-            self.btn_dl.setDisabled(True)
             self.fetch_thread = FetchThread(self, self.glovar.session, self.glovar.proxy, pid, uid, num)
             self.fetch_thread.fetch_success.connect(self.tabulate)
             self.fetch_thread.except_signal.connect(globj.show_messagebox)
@@ -517,6 +517,8 @@ class MainWidget(QWidget):
             self.fetch_thread.start()
         else:
             globj.show_messagebox(self, QMessageBox.Warning, '错误', '请输入查询信息！')
+            self.btn_get.setDisabled(False)
+            self.btn_dl.setDisabled(False)
 
     def fetch_new_finished(self):
         self.btn_get.setDisabled(False)

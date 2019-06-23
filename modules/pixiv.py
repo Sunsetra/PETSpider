@@ -253,7 +253,7 @@ def download_thumb(se, proxy: dict, item: dict) -> str:
             with NamedTemporaryFile('w+b', prefix='PETSpider_', delete=False) as thumb:
                 for chunk in thumb_res.iter_content():
                     thumb.write(chunk)
-                    path = thumb.name
+                path = thumb.name
     except (OSError, IOError):
         return ''
     else:
