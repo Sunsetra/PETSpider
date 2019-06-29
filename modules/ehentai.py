@@ -109,6 +109,8 @@ def information(se, proxy: dict, addr: str) -> dict:
                     timeout=5) as gallery_res:
             gallery_html = BeautifulSoup(gallery_res.text, 'lxml')
         _ban_checker(gallery_html)
+        if 'Gallery not found.' in gallery_html.body.get_text() or 'Key missing' in gallery_html.body.get_text():
+            raise globj.WrongAddressError('Wrong address provided.')
         name = gallery_html.find('h1', id='gj').string  # Japanese name is prior
         if not name:
             name = gallery_html.find('h1', id='gn').string
@@ -116,10 +118,10 @@ def information(se, proxy: dict, addr: str) -> dict:
         thumb = re_thumb.match(gallery_html.find('div', id='gd1').div['style']).group(1)
         if name and misc and thumb:
             return {
-                'gid': addr.split('/')[-3],
+                'addr': addr,
                 'name': name,
                 'size': misc[4].string,
-                'page': int(misc[5].string[:-6]),
+                'page': misc[5].string[:-6],
                 'thumb': thumb
             }
         else:
@@ -131,13 +133,12 @@ def information(se, proxy: dict, addr: str) -> dict:
         raise globj.ResponseError('Information: ' + repr(e))
 
 
-def fetch_keys(se, proxy: dict, addr: str, info: dict) -> dict:
+def fetch_keys(se, proxy: dict, info: dict) -> dict:
     """
     Fetch keys(imgkeys and showkey) from gallery.
     Args:
         se: Session instance.
         proxy: (Optional) The proxy used.
-        addr: Gallery address.
         info: Information of the gallery.
     Return:
         A dictionary. {'page': imgkey, '0': showkey}
@@ -146,11 +147,12 @@ def fetch_keys(se, proxy: dict, addr: str, info: dict) -> dict:
     """
     re_imgkey = re.compile(r'https://exhentai\.org/s/(\w{10})/\d*-(\d{1,4})')
     re_showkey = re.compile(r'[\S\s]*showkey="(\w{11})"[\S\s]*')
-    pn = info['page'] // 40 + 1  # range(0) has no element
+    gid = info['addr'].split(' / ')[-3]
+    pn = int(info['page']) // 40 + 1  # range(0) has no element
     keys = dict()
     try:
         for p in range(pn):
-            with se.get(addr,
+            with se.get(info['addr'],
                         params={'inline_set': 'ts_m', 'p': p},
                         headers={'User-Agent': random.choice(globj.GlobalVar.user_agent)},
                         proxies=proxy,
@@ -165,7 +167,7 @@ def fetch_keys(se, proxy: dict, addr: str, info: dict) -> dict:
                 keys[match.group(2)] = match.group(1)
 
         # Fetch showkey from first picture
-        showkey_url = '/'.join(['https://exhentai.org/s', keys['1'], info['gid'] + '-1'])
+        showkey_url = '/'.join(['https://exhentai.org/s', keys['1'], gid + '-1'])
         with se.get(showkey_url,
                     headers={'User-Agent': random.choice(globj.GlobalVar.user_agent)},
                     proxies=proxy,
@@ -197,11 +199,12 @@ def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, rena
         globj.ResponseError: Raised when server sends abnormal response.
         globj.LimitationReachedError: Raised when reach view limitation.
     """
+    gid = info['addr'].split(' / ')[-3]
     try:
         with se.post(_EXHENTAI_URL + 'api.php',
                      json={'method': 'showpage',
-                           'gid': int(info['gid']),
-                           'page': page,
+                           'gid': int(gid),
+                           'page': int(page),
                            'imgkey': keys[str(page)],
                            'showkey': keys['0']},
                      headers={'User-Agent': random.choice(globj.GlobalVar.user_agent)},
@@ -254,11 +257,11 @@ def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, rena
         raise globj.ResponseError('Download: ' + repr(e))
 
 
-def download_thumb(se, proxy: dict, addr: str) -> str:
+def download_thumb(se, proxy: dict, info: dict) -> str:
     """Download thumbnail to a temp folder."""
     header = {'User-Agent': random.choice(globj.GlobalVar.user_agent)}
     try:
-        with se.get(addr,
+        with se.get(info['thumb'],
                     headers=header,
                     proxies=proxy,
                     stream=True,

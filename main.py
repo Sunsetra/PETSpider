@@ -157,9 +157,9 @@ class MainWindow(QMainWindow):
 
         setting_thumbnail = int(self.settings.value('thumbnail', True))
         if self.pixiv_main:  # Change thumbnail behavior
-            self.pixiv_main.change_thumb(setting_thumbnail)
-        elif self.ehentai_main:
-            self.ehentai_main.change_thumb(setting_thumbnail)
+            self.pixiv_main.change_thumb_state(setting_thumbnail)
+        if self.ehentai_main:
+            self.ehentai_main.change_thumb_state(setting_thumbnail)
         self.settings.endGroup()
 
     def rule_setting_dialog(self):

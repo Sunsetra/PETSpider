@@ -305,6 +305,7 @@ class MainWidget(QWidget):
         self.ATC_monitor.setInterval(500)
         self.ATC_monitor.timeout.connect(self.except_checker)
         self.except_info = None  # Store message box function instance
+        self.thread_count = 0
         self.cancel_download_flag = 0
 
         self.thumb_dict = dict()  # Store pid and corresponding thumbnail path
@@ -348,7 +349,7 @@ class MainWidget(QWidget):
         self.btn_group.buttonClicked[int].connect(self.change_stat)
 
         self.table_viewer = QTableWidget()  # Detail viewer of fetched info
-        self.table_viewer.cellPressed.connect(self.download_thumb)
+        self.table_viewer.cellPressed.connect(self.change_thumb)
         self.table_viewer.itemSelectionChanged.connect(self.set_default_thumb)
         self.table_viewer.setWordWrap(False)
         self.table_viewer.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -524,7 +525,7 @@ class MainWidget(QWidget):
         self.btn_get.setDisabled(False)
         self.btn_dl.setDisabled(False)
 
-    def download_thumb(self, row):
+    def change_thumb(self, row):
         if self.show_thumb_flag:
             pid = self.table_viewer.item(row, 0).text()
             if pid in self.thumb_dict:
@@ -545,7 +546,7 @@ class MainWidget(QWidget):
         thumb = QPixmap(info[1])
         self.thumbnail.setPixmap(thumb)
 
-    def change_thumb(self, new):
+    def change_thumb_state(self, new):
         """Change state of whether show thumbnail in setting."""
         self.show_thumb_flag = new
         if self.show_thumb_flag:
@@ -581,36 +582,41 @@ class MainWidget(QWidget):
                     thread = DownloadPicThread(self, self.glovar.session, self.glovar.proxy, info, path, page)
                     thread.signals.except_signal.connect(self.except_download)
                     thread.signals.download_success.connect(self.finish_download)
+                    self.thread_count += 1
                     self.thread_pool.start(thread)
         else:
             globj.show_messagebox(self, QMessageBox.Warning, '警告', '请选择至少一行！')
 
     def cancel_download(self):
         self.btn_dl.setDisabled(True)
-        self.cancel_download_flag = 1
         self.thread_pool.clear()
+        self.thread_count = self.thread_pool.activeThreadCount()
+        self.cancel_download_flag = 1
 
     def except_download(self, *args):
         """Cancel download threads when exceptions raised."""
         self.cancel_download()
         if not self.except_info:
             self.except_info = args
-            self.ATC_monitor.start()
+            if self.thread_pool.maxThreadCount() == 1:
+                self.ATC_monitor.start()
 
     def except_checker(self):
         """Check whether all thread in pool has ended."""
+        print(self.thread_pool.activeThreadCount())
         if not self.thread_pool.activeThreadCount():
             self.ATC_monitor.stop()
             globj.show_messagebox(*self.except_info)
             self.btn_dl.setDisabled(False)
-            self.btn_dl.setText('下载')
+            self.btn_dl.setText('下载')  # Single thread needs this
             self.btn_dl.clicked.disconnect(self.cancel_download)
             self.btn_dl.clicked.connect(self.download)
 
     def finish_download(self):
         """Do some clearing stuff when thread has finished."""
-        print('线程结束:', self.thread_pool.activeThreadCount())
-        if not self.thread_pool.activeThreadCount():
+        self.thread_count -= 1
+        print('线程结束:', self.thread_count)
+        if not self.thread_count:
             if self.cancel_download_flag:
                 self.btn_dl.setDisabled(False)
             elif self.except_info:
@@ -638,7 +644,7 @@ class MainWidget(QWidget):
 
     def logout_fn(self) -> bool:
         self.btn_logout.setDisabled(True)
-        if self.thread_pool.activeThreadCount():
+        if self.thread_count:
             msg_box = QMessageBox(self)
             msg_box.setWindowTitle('正在下载')
             msg_box.setIcon(QMessageBox.Warning)

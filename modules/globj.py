@@ -256,6 +256,7 @@ class SaveRuleDialog(QWidget):
 
     def closeEvent(self, event):
         self.pixiv_tab.restore()
+        self.ehentai_tab.restore()
 
 
 class LineEditor(QLineEdit):
@@ -313,6 +314,16 @@ class LimitationReachedError(ResponseError):
 
     def __init__(self, page):
         super().__init__(page)
+
+
+class WrongAddressError(ResponseError):
+    """Exception for providing wrong address."""
+
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __str__(self):
+        return repr(self.msg)
 
 
 class ValidationError(Exception):
