@@ -263,7 +263,8 @@ class MainWidget(QWidget):
         self.btn_get.clicked.connect(self.fetch_info)
         self.btn_add = QPushButton('加入队列')
         self.btn_add.clicked.connect(self.add_que)
-        self.btn_del = QPushButton('移除选定')
+        self.btn_remove = QPushButton('移除选定')
+        self.btn_remove.clicked.connect(self.remove_row)
         self.btn_start = QPushButton('开始队列')
 
         self.user_info = QLabel('下载限额：{0}/{1}'.format(info[0], info[1]))
@@ -317,7 +318,7 @@ class MainWidget(QWidget):
         hlay_acts.addStretch(1)
         hlay_acts.addWidget(self.btn_get)
         hlay_acts.addWidget(self.btn_add)
-        hlay_acts.addWidget(self.btn_del)
+        hlay_acts.addWidget(self.btn_remove)
         hlay_acts.addWidget(self.btn_start)
         hlay_acts.addStretch(1)
 
@@ -412,40 +413,42 @@ class MainWidget(QWidget):
         if info:
             self.current = info
         origin = self.ledit_addr.text().strip()
-        addr = origin + '/' if origin[-1] != '/' else origin
+        if origin:
+            addr = origin + '/' if origin[-1] != '/' else origin
+            if self.current and addr == self.current['addr']:  # Current info avaliable and address doesn't change
+                self.show_info(self.current)
+                self.current['status'] = 'pending'  # Add key to describe status
+                row_count = self.que.rowCount()
+                self.que.setRowCount(row_count + 1)
 
-        if addr == self.current['addr']:  # Current info avaliable and address doesn't change
-            self.current['status'] = 'pending'  # Add key to describe status
-            row_count = self.que.rowCount()
-            self.que.setRowCount(row_count + 1)
+                self.que.setItem(row_count, 0, QTableWidgetItem(self.current['name']))
+                size = QTableWidgetItem(self.current['size'])
+                size.setTextAlignment(Qt.AlignCenter)
+                self.que.setItem(row_count, 1, size)
+                page = QTableWidgetItem(self.current['page'])
+                page.setTextAlignment(Qt.AlignCenter)
+                self.que.setItem(row_count, 2, page)
+                self.que.setItem(row_count, 3, QTableWidgetItem('等待中'))
+                self.que.setItem(row_count, 4, QTableWidgetItem(self.current['addr']))
 
-            self.que.setItem(row_count, 0, QTableWidgetItem(self.current['name']))
-            size = QTableWidgetItem(self.current['size'])
-            size.setTextAlignment(Qt.AlignCenter)
-            self.que.setItem(row_count, 1, size)
-            page = QTableWidgetItem(self.current['page'])
-            page.setTextAlignment(Qt.AlignCenter)
-            self.que.setItem(row_count, 2, page)
-            self.que.setItem(row_count, 3, QTableWidgetItem('等待中'))
-            self.que.setItem(row_count, 4, QTableWidgetItem(self.current['addr']))
+                self.que.selectRow(row_count)
+                self.que_dict[self.current['addr']] = self.current
 
-            self.que_dict[self.current['addr']] = self.current
-
-        else:  # When current info has not fetched but addr served or changed, get info
-            if self.ledit_addr.text():
-                self.btn_add.setDisabled(True)
-                self.btn_get.setDisabled(True)
-                if re.match(r'(https?://)?e[x-]hentai.org/g/\d{1,7}/\w{10}/', addr):  # Check legality
-                    self.fetch_thread = FetchInfoThread(self, self.glovar.session, self.glovar.proxy, addr)
-                    self.fetch_thread.fetch_success.connect(self.add_que)
-                    self.fetch_thread.except_signal.connect(globj.show_messagebox)
-                    self.fetch_thread.finished.connect(self.fetch_info_finished)
-                    self.fetch_thread.start()
+            else:  # When current info has not fetched but addr served or changed, get info
+                if self.ledit_addr.text():
+                    self.btn_add.setDisabled(True)
+                    self.btn_get.setDisabled(True)
+                    if re.match(r'(https?://)?e[x-]hentai.org/g/\d{1,7}/\w{10}/', addr):  # Check legality
+                        self.fetch_thread = FetchInfoThread(self, self.glovar.session, self.glovar.proxy, addr)
+                        self.fetch_thread.fetch_success.connect(self.add_que)
+                        self.fetch_thread.except_signal.connect(globj.show_messagebox)
+                        self.fetch_thread.finished.connect(self.fetch_info_finished)
+                        self.fetch_thread.start()
+                    else:
+                        globj.show_messagebox(self, QMessageBox.Warning, '错误', '画廊地址输入错误！')
+                        self.fetch_info_finished()
                 else:
-                    globj.show_messagebox(self, QMessageBox.Warning, '错误', '画廊地址输入错误！')
-                    self.fetch_info_finished()
-            else:
-                globj.show_messagebox(self, QMessageBox.Warning, '错误', '请输入画廊地址！')
+                    globj.show_messagebox(self, QMessageBox.Warning, '错误', '请输入画廊地址！')
 
     def fetch_info_succeed(self, info: dict):
         """After fetching info successfully, set Current variable."""
@@ -464,6 +467,16 @@ class MainWidget(QWidget):
         """Set default thumbnail when no item selected."""
         if not self.que.selectedItems() and self.show_thumb_flag:
             self.thumbnail.setPixmap(self.thumb_default)
+            self.info.clear()
+
+    def remove_row(self):
+        if self.que.selectedRanges():
+            del_row = self.que.selectedRanges()[0].rowCount()
+            del_bottom = self.que.selectedRanges()[0].bottomRow()
+            for i in range(del_row):
+                self.que.removeRow(del_bottom)
+                del_bottom -= 1
+            self.set_default_thumb()
 
     def change_thumb_state(self, new):
         """Change state of whether show thumbnail in setting."""

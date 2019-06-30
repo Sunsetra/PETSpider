@@ -589,9 +589,9 @@ class MainWidget(QWidget):
 
     def cancel_download(self):
         self.btn_dl.setDisabled(True)
-        self.thread_pool.clear()
-        self.thread_count = self.thread_pool.activeThreadCount()
         self.cancel_download_flag = 1
+        self.thread_count = self.thread_pool.activeThreadCount()
+        self.thread_pool.clear()
 
     def except_download(self, *args):
         """Cancel download threads when exceptions raised."""
