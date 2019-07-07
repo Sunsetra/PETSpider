@@ -565,6 +565,7 @@ class MainWidget(QWidget):
             self.btn_dl.setText('取消下载')
             self.btn_dl.clicked.disconnect(self.download)
             self.btn_dl.clicked.connect(self.cancel_download)
+
             self.settings.beginGroup('RuleSetting')
             root_path = self.settings.value('pixiv_root_path', os.path.abspath('.'))
             folder_rule = self.settings.value('pixiv_folder_rule', {0: 'illustId'})

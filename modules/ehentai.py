@@ -1,6 +1,5 @@
 # coding:utf-8
 """E(x)hentai components."""
-# TODO: Need to add conception of proxy pool.
 import os
 import random
 import re
@@ -147,7 +146,7 @@ def fetch_keys(se, proxy: dict, info: dict) -> dict:
     """
     re_imgkey = re.compile(r'https://exhentai\.org/s/(\w{10})/\d*-(\d{1,4})')
     re_showkey = re.compile(r'[\S\s]*showkey="(\w{11})"[\S\s]*')
-    gid = info['addr'].split(' / ')[-3]
+    gid = info['addr'].split('/')[-3]
     pn = int(info['page']) // 40 + 1  # range(0) has no element
     keys = dict()
     try:
@@ -199,7 +198,7 @@ def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, rena
         globj.ResponseError: Raised when server sends abnormal response.
         globj.LimitationReachedError: Raised when reach view limitation.
     """
-    gid = info['addr'].split(' / ')[-3]
+    gid = info['addr'].split('/')[-3]
     try:
         with se.post(_EXHENTAI_URL + 'api.php',
                      json={'method': 'showpage',
@@ -228,7 +227,8 @@ def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, rena
         else:
             raise globj.ResponseError('Download: No plenty elements.')
 
-        folder_path = os.path.join(path, info['name'])
+        folder_name = globj.name_verify(info['name'])
+        folder_path = os.path.join(path, folder_name)
         if not os.path.exists(folder_path):
             print('mkdir:', folder_path)
             os.makedirs(folder_path)
@@ -240,17 +240,17 @@ def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, rena
             url = pic_res.url
             if url.split('/')[2] == 'exhentai.org':  # If response cannot redirect(302), raise exception
                 raise globj.LimitationReachedError(page)
-            name = os.path.split(pic_res.url)[-1].rstrip('?dl=1')  # Get file name from url
+            file_name = os.path.split(pic_res.url)[-1].rstrip('?dl=1')  # Get file name from url
             if rename:
-                name = str(page) + os.path.splitext(name)[1]
-            real_path = os.path.join(folder_path, name)
+                file_name = str(page) + os.path.splitext(file_name)[1]
+            real_path = os.path.join(folder_path, file_name)
             if not os.path.exists(real_path) or rewrite:  # If file exists or not rewrite, skip it
                 print('Downloading:', real_path)
                 with open(real_path, 'ab') as data:
                     for chunk in pic_res.iter_content():
                         data.write(chunk)
             else:
-                print('Skip:', name)
+                print('Skip:', file_name)
     except requests.Timeout:
         raise requests.Timeout('Download: Timeout.')
     except AttributeError as e:

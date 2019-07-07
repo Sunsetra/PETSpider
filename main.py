@@ -174,6 +174,11 @@ class MainWindow(QMainWindow):
                 event.accept()
             else:
                 event.ignore()
+        if self.ehentai_main:
+            if self.ehentai_main.logout_fn():
+                event.accept()
+            else:
+                event.ignore()
 
 
 if __name__ == '__main__':

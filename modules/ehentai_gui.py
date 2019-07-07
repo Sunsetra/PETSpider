@@ -5,7 +5,7 @@ import re
 from functools import partial
 
 import requests
-from PyQt5.QtCore import Qt, QSettings, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QSettings, QThread, pyqtSignal, QThreadPool, QObject, QRunnable
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QFormLayout, QWidget, QGroupBox, QLineEdit, QPushButton,
                              QCheckBox, QLabel, QSplitter, QFileDialog, QFrame, QMessageBox, QTableWidget, QHeaderView,
@@ -245,6 +245,37 @@ class DownloadThumbThread(QThread):
             self.download_success.emit(self.info)
 
 
+class FetchKeyThread(QThread):
+    fetch_success = pyqtSignal(dict, dict)
+    except_signal = pyqtSignal(object, int, str, str)
+
+    def __init__(self, parent, session, proxy: dict, info: dict):
+        super().__init__()
+        self.parent = parent
+        self.session = session
+        self.proxy = proxy
+        self.info = info
+
+    def run(self):
+        try:
+            keys = ehentai.fetch_keys(self.session, self.proxy, self.info)
+        except (requests.exceptions.ProxyError,
+                requests.exceptions.Timeout,
+                requests.exceptions.ConnectionError) as e:
+            self.except_signal.emit(self.parent, QMessageBox.Warning, '连接失败', '请检查网络或使用代理。\n' + repr(e))
+        except globj.IPBannedError as e:
+            self.except_signal.emit(self.parent, QMessageBox.Critical, 'IP被封禁',
+                                    '当前IP已被封禁，将在{0}小时{1}分{2}秒后解封。'.format(e.args[0], e.args[1], e.args[2]))
+        except globj.WrongAddressError:
+            self.except_signal.emit(self.parent, QMessageBox.Critical, '地址错误',
+                                    '请输入正确的画廊地址。')
+        except globj.ResponseError as e:
+            self.except_signal.emit(self.parent, QMessageBox.Critical,
+                                    '未知错误', '返回值错误，请向开发者反馈\n{0}'.format(repr(e)))
+        else:
+            self.fetch_success.emit(self.info, keys)
+
+
 class MainWidget(QWidget):
     logout_sig = pyqtSignal(str)
 
@@ -254,11 +285,16 @@ class MainWidget(QWidget):
         self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
         self.refresh_thread = QThread()
         self.fetch_thread = QThread()
+        self.fetch_key_thread = QThread()
         self.thumb_thread = QThread()
         self.current = dict()
         self.que_dict = dict()
 
         self.ledit_addr = globj.LineEditor()
+        self.cbox_rename = QCheckBox('按序号重命名')
+        self.cbox_rename.setToolTip('勾选后将以图片在画廊中的序号重命名而非使用原图片名。')
+        self.cbox_rewrite = QCheckBox('覆盖模式')
+        self.cbox_rewrite.setToolTip('勾选后将不会跳过同名文件而是覆盖它。')
         self.btn_get = QPushButton('获取信息')
         self.btn_get.clicked.connect(self.fetch_info)
         self.btn_add = QPushButton('加入队列')
@@ -266,6 +302,7 @@ class MainWidget(QWidget):
         self.btn_remove = QPushButton('移除选定')
         self.btn_remove.clicked.connect(self.remove_row)
         self.btn_start = QPushButton('开始队列')
+        self.btn_start.clicked.connect(self.start_que)
 
         self.user_info = QLabel('下载限额：{0}/{1}'.format(info[0], info[1]))
         self.btn_refresh = QPushButton('刷新限额')
@@ -314,6 +351,10 @@ class MainWidget(QWidget):
         hlay_addr.addWidget(QLabel('画廊地址'))
         hlay_addr.addWidget(self.ledit_addr)
         hlay_addr.setStretch(0, 0)
+        hlay_cbox = QHBoxLayout()
+        hlay_cbox.addWidget(self.cbox_rename)
+        hlay_cbox.addWidget(self.cbox_rewrite)
+        hlay_cbox.setAlignment(Qt.AlignLeft)
         hlay_acts = QHBoxLayout()
         hlay_acts.addStretch(1)
         hlay_acts.addWidget(self.btn_get)
@@ -324,6 +365,7 @@ class MainWidget(QWidget):
 
         vlay_left = QVBoxLayout()
         vlay_left.addLayout(hlay_addr)
+        vlay_left.addLayout(hlay_cbox)
         vlay_left.addLayout(hlay_acts)
         left_wid = QWidget()
         left_wid.setLayout(vlay_left)
@@ -417,7 +459,6 @@ class MainWidget(QWidget):
             addr = origin + '/' if origin[-1] != '/' else origin
             if self.current and addr == self.current['addr']:  # Current info avaliable and address doesn't change
                 self.show_info(self.current)
-                self.current['status'] = 'pending'  # Add key to describe status
                 row_count = self.que.rowCount()
                 self.que.setRowCount(row_count + 1)
 
@@ -474,8 +515,15 @@ class MainWidget(QWidget):
             del_row = self.que.selectedRanges()[0].rowCount()
             del_bottom = self.que.selectedRanges()[0].bottomRow()
             for i in range(del_row):
-                self.que.removeRow(del_bottom)
-                del_bottom -= 1
+                status = self.que.item(del_bottom, 3).text()
+                if status == '等待中' or status == '已完成':
+                    self.que.removeRow(del_bottom)
+                    del_bottom -= 1
+                else:
+                    globj.show_messagebox(self, QMessageBox.Warning, '错误', '不能移除下载中的任务，请先停止队列！')
+                    break
+            if not self.que.rowCount():  # When the queue is empty, clear dict of info,
+                self.que_dict.clear()  # in case of one gallery is added repeatedly
             self.set_default_thumb()
 
     def change_thumb_state(self, new):
@@ -513,8 +561,6 @@ class SaveRuleSettingTab(QWidget):
         super().__init__()
         self.settings = settings
         self.root_path = None
-        self.cbox_rename = QCheckBox('按序号重命名')
-        self.cbox_rename.setToolTip('勾选后将以图片在画廊中的序号重命名而非使用原图片名。')
         self.ledit_prev = globj.LineEditor()
         self.ledit_prev.setReadOnly(True)
         self.ledit_prev.setContextMenuPolicy(Qt.NoContextMenu)
@@ -525,14 +571,11 @@ class SaveRuleSettingTab(QWidget):
     def init_ui(self):
         btn_root = QPushButton('浏览')
         btn_root.clicked.connect(self.choose_dir)
-
         hlay_root = QHBoxLayout()
         hlay_root.addWidget(QLabel('根目录'))
         hlay_root.addWidget(btn_root)
-
         vlay_ehentai = QVBoxLayout()
         vlay_ehentai.addLayout(hlay_root)
-        vlay_ehentai.addWidget(self.cbox_rename)
         vlay_ehentai.addWidget(self.ledit_prev)
         vlay_ehentai.setAlignment(Qt.AlignTop)
         self.setLayout(vlay_ehentai)
@@ -557,16 +600,12 @@ class SaveRuleSettingTab(QWidget):
     def store(self):
         self.settings.beginGroup('RuleSetting')
         self.settings.setValue('ehentai_root_path', self.root_path)
-        self.settings.setValue('ehentai_rename', int(self.cbox_rename.isChecked()))
         self.settings.sync()
         self.settings.endGroup()
 
     def restore(self):
         self.settings.beginGroup('RuleSetting')
         self.root_path = self.settings.value('ehentai_root_path', os.path.abspath('.'))
-        setting_rename = int(self.settings.value('ehentai_rename', False))
         self.settings.endGroup()
-
         self.ledit_prev.setText(self.root_path)
-        self.cbox_rename.setChecked(setting_rename)
         self.previewer()
