@@ -229,6 +229,47 @@ class AddQueueThread(QThread):
             self.fetch_success.emit(info)
 
 
+class DownloadSignals(QObject):
+    download_success = pyqtSignal(dict, dict, int, str, bool, bool)
+    retry_signal = pyqtSignal(dict, dict, int, str, bool, bool, str)
+    except_signal = pyqtSignal(object, int, str, str)
+
+
+class DownloadPicThread(QRunnable):
+    def __init__(self, parent, sess, proxy, info: dict, keys: dict, page: int, path: str, rename=False, rewrite=False):
+        super().__init__()
+        self.parent = parent
+        self.sess = sess
+        self.proxy = proxy
+        self.info = info
+        self.keys = keys
+        self.path = path
+        self.page = page
+        self.rn = rename
+        self.rw = rewrite
+        self.signals = DownloadSignals()
+
+    def run(self):  # Only do retrying when connection error occurs
+        try:
+            ehentai.download(self.sess, self.proxy, self.info, self.keys, self.page, self.path, self.rn, self.rw)
+        except (requests.exceptions.ProxyError,
+                requests.exceptions.Timeout,
+                requests.exceptions.ConnectionError,
+                requests.exceptions.ChunkedEncodingError) as e:
+            self.signals.retry_signal.emit(self.info, self.keys, self.page, self.path, self.rn, self.rw, repr(e))
+        except globj.LimitationReachedError:
+            self.signals.except_signal.emit(self.parent, QMessageBox.Warning, '警告',
+                                            '当前IP已达下载限额，请更换代理IP。')
+        except (FileNotFoundError, PermissionError) as e:
+            self.signals.except_signal.emit(self.parent, QMessageBox.Critical, '错误',
+                                            '文件系统错误：\n' + repr(e))
+        except globj.ResponseError as e:
+            self.signals.except_signal.emit(self.parent, QMessageBox.Critical,
+                                            '未知错误', '返回值错误，请向开发者反馈\n{0}'.format(repr(e)))
+        else:
+            self.signals.download_success.emit(self.info, self.keys, self.page, self.path, self.rn, self.rw)
+
+
 class DownloadThumbThread(QThread):
     download_success = pyqtSignal(dict)
 
@@ -287,8 +328,17 @@ class MainWidget(QWidget):
         self.fetch_thread = QThread()
         self.fetch_key_thread = QThread()
         self.thumb_thread = QThread()
-        self.current = dict()
-        self.que_dict = dict()
+        self.current = dict()  # Save current info
+        self.current_line = dict()  # Save current downloading line
+        self.que_dict = dict()  # Save all items in the queue, the key is addr
+        self.remain = set()  # Save remaining/unsuccessful pages
+        self.thread_pool = QThreadPool.globalInstance()
+        self.thread_count = 0
+        self.cancel_download_flag = 0
+        # self.ATC_monitor = QTimer()  # Use QTimer to monitor ACT when exception catched
+        # self.ATC_monitor.setInterval(500)
+        # self.ATC_monitor.timeout.connect(self.except_checker)
+        # self.except_info = None  # Store message box function instance
 
         self.ledit_addr = globj.LineEditor()
         self.cbox_rename = QCheckBox('按序号重命名')
@@ -526,6 +576,111 @@ class MainWidget(QWidget):
                 self.que_dict.clear()  # in case of one gallery is added repeatedly
             self.set_default_thumb()
 
+    def get_line(self, status1: str, status2: str = '') -> int:
+        """Return the first status line number."""
+        for i in range(self.que.rowCount()):
+            if self.que.item(i, 3).text() == status1 or self.que.item(i, 3).text() == status2:
+                return i
+        return -1
+
+    def start_que(self, loop=False):
+        if self.que.rowCount():
+            if self.btn_start.text() == '开始队列':  # Do not change this when download line 2
+                self.btn_start.setText('停止队列')
+                self.btn_start.clicked.disconnect(self.start_que)
+                self.btn_start.clicked.connect(self.stop_que)
+
+            line = self.get_line('等待中') if loop else self.get_line('等待中', '已完成')
+            if line >= 0:
+                self.que.item(line, 3).setText('准备中')
+                info = self.que_dict[self.que.item(line, 4).text()]
+                self.current_line['info'] = info
+                self.fetch_key_thread = FetchKeyThread(self, self.glovar.session, self.glovar.proxy, info)
+                self.fetch_key_thread.except_signal.connect(globj.show_messagebox)
+                self.fetch_key_thread.fetch_success.connect(self.fetch_finished)
+                self.fetch_key_thread.start()
+            else:
+                self.current_line = dict()
+                self.btn_start.setText('开始队列')
+                self.btn_start.clicked.disconnect(self.stop_que)
+                self.btn_start.clicked.connect(self.start_que)
+                globj.show_messagebox(self, QMessageBox.Information, '完成', '队列下载完成！')
+        else:
+            globj.show_messagebox(self, QMessageBox.Warning, '警告', '下载队列为空！')
+
+    def fetch_finished(self, info, keys):
+        self.current_line['keys'] = keys
+        line = self.get_line('准备中')
+        self.que.item(line, 3).setText('下载中')
+
+        self.settings.beginGroup('RuleSetting')
+        root_path = self.settings.value('ehentai_root_path', os.path.abspath('.'))
+        self.settings.endGroup()
+        self.settings.beginGroup('MiscSetting')
+        dl_sametime = int(self.settings.value('dl_sametime', 3))
+        self.settings.endGroup()
+        self.thread_pool.setMaxThreadCount(dl_sametime)
+        rename = self.cbox_rename.checkState()
+        rewrite = self.cbox_rewrite.checkState()
+        self.remain = set(range(1, int(info['page']) + 1))
+        self.download(info, keys, root_path, rename, rewrite)
+
+    def download(self, info, keys, root_path, rename, rewrite):
+        for num in self.remain:
+            thread = DownloadPicThread(self, self.glovar.session, self.glovar.proxy, info, keys, num,
+                                       root_path, rename=rename, rewrite=rewrite)
+            thread.signals.except_signal.connect(self.download_exception)
+            thread.signals.retry_signal.connect(self.download_exception)
+            thread.signals.download_success.connect(self.download_finished)
+            self.thread_count += 1
+            self.thread_pool.start(thread)
+
+    def download_exception(self, *args):
+        self.thread_count -= 1
+        if args[0] is dict:
+            print('线程出错：', args[-1])
+            print('活动线程：', self.thread_pool.activeThreadCount(), '线程计数：', self.thread_count)
+            if not self.thread_count:
+                print('重新下载：', self.remain)
+                self.download(*args[:-1])
+        else:
+            self.stop_que()
+            if not self.thread_count:
+                globj.show_messagebox(*args)
+
+    def download_finished(self, info, keys, page, root_path, rename, rewrite):
+        self.thread_count -= 1
+        print('活动线程：', self.thread_pool.activeThreadCount(), '线程计数：', self.thread_count)
+        if not self.cancel_download_flag:
+            self.remain.remove(page)
+            if not self.thread_count:
+                if self.remain:
+                    print('重新下载：', self.remain)
+                    self.download(info, keys, root_path, rename, rewrite)
+                else:
+                    line = self.get_line('下载中')
+                    self.que.item(line, 3).setText('已完成')
+                    self.start_que(True)
+
+    def cancel_download(self):
+        self.btn_start.setDisabled(True)
+        self.cancel_download_flag = 1
+        self.thread_count = self.thread_pool.activeThreadCount()
+        self.thread_pool.clear()
+        self.fetch_thread.exit(0)
+        self.fetch_key_thread.exit(0)
+        self.remain = set()
+        for i in range(self.que.rowCount()):
+            if self.que.item(i, 3).text() == '准备中' or self.que.item(i, 3).text() == '下载中':
+                self.que.item(i, 3).setText('等待中')
+
+    def stop_que(self):
+        self.cancel_download()
+        self.btn_start.setText('开始队列')
+        self.btn_start.clicked.disconnect(self.stop_que)
+        self.btn_start.clicked.connect(self.start_que)
+        self.btn_start.setDisabled(False)
+
     def change_thumb_state(self, new):
         """Change state of whether show thumbnail in setting."""
         self.show_thumb_flag = new
@@ -548,11 +703,32 @@ class MainWidget(QWidget):
 
     def logout_fn(self) -> bool:
         self.btn_logout.setDisabled(True)
-        self.thumb_thread.exit(-1)
-        self.refresh_thread.exit(-1)
-        self.fetch_thread.exit(-1)
-        self.logout_sig.emit('ehentai')
-        return True
+        if self.thread_count:
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle('正在下载')
+            msg_box.setIcon(QMessageBox.Warning)
+            msg_box.setText('下载任务正在进行中，是否退出？')
+            msg_box.addButton('确定', QMessageBox.AcceptRole)
+            msg_box.addButton('取消', QMessageBox.DestructiveRole)
+            reply = msg_box.exec()
+            if reply == QMessageBox.AcceptRole:
+                self.cancel_download()
+                self.thumb_thread.exit(-1)
+                self.refresh_thread.exit(-1)
+                self.fetch_thread.exit(-1)
+                self.thread_pool.waitForDone()
+                self.logout_sig.emit('ehentai')
+                return True
+            else:
+                self.btn_logout.setDisabled(False)
+                return False
+        else:
+            self.thumb_thread.exit(-1)
+            self.refresh_thread.exit(-1)
+            self.fetch_thread.exit(-1)
+            self.thread_pool.waitForDone()
+            self.logout_sig.emit('ehentai')
+            return True
 
 
 class SaveRuleSettingTab(QWidget):

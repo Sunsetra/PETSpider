@@ -604,7 +604,6 @@ class MainWidget(QWidget):
 
     def except_checker(self):
         """Check whether all thread in pool has ended."""
-        print(self.thread_pool.activeThreadCount())
         if not self.thread_pool.activeThreadCount():
             self.ATC_monitor.stop()
             globj.show_messagebox(*self.except_info)
