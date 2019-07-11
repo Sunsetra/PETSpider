@@ -245,6 +245,8 @@ def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, rena
                 file_name = str(page) + os.path.splitext(file_name)[1]
             real_path = os.path.join(folder_path, file_name)
             if not os.path.exists(real_path) or rewrite:  # If file exists or not rewrite, skip it
+                if os.path.exists(real_path):
+                    os.remove(real_path)
                 print('Downloading:', real_path)
                 with open(real_path, 'ab') as data:
                     for chunk in pic_res.iter_content():

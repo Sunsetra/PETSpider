@@ -231,7 +231,7 @@ class AddQueueThread(QThread):
 
 class DownloadSignals(QObject):
     download_success = pyqtSignal(dict, dict, int, str, bool, bool)
-    retry_signal = pyqtSignal(dict, dict, int, str, bool, bool, str)
+    retry_signal = pyqtSignal(dict, dict, str, bool, bool, str)
     except_signal = pyqtSignal(object, int, str, str)
 
 
@@ -256,7 +256,7 @@ class DownloadPicThread(QRunnable):
                 requests.exceptions.Timeout,
                 requests.exceptions.ConnectionError,
                 requests.exceptions.ChunkedEncodingError) as e:
-            self.signals.retry_signal.emit(self.info, self.keys, self.page, self.path, self.rn, self.rw, repr(e))
+            self.signals.retry_signal.emit(self.info, self.keys, self.path, self.rn, True, repr(e))
         except globj.LimitationReachedError:
             self.signals.except_signal.emit(self.parent, QMessageBox.Warning, '警告',
                                             '当前IP已达下载限额，请更换代理IP。')
@@ -630,23 +630,24 @@ class MainWidget(QWidget):
             thread = DownloadPicThread(self, self.glovar.session, self.glovar.proxy, info, keys, num,
                                        root_path, rename=rename, rewrite=rewrite)
             thread.signals.except_signal.connect(self.download_exception)
-            thread.signals.retry_signal.connect(self.download_exception)
+            thread.signals.retry_signal.connect(self.retry_exception)
             thread.signals.download_success.connect(self.download_finished)
             self.thread_count += 1
             self.thread_pool.start(thread)
 
+    def retry_exception(self, *args):
+        self.thread_count -= 1
+        print('线程出错：', args[-1])
+        print('活动线程：', self.thread_pool.activeThreadCount(), '线程计数：', self.thread_count)
+        if not self.thread_count and not self.cancel_download_flag:
+            print('重新下载：', self.remain)
+            self.download(*args[:-1])
+
     def download_exception(self, *args):
         self.thread_count -= 1
-        if args[0] is dict:
-            print('线程出错：', args[-1])
-            print('活动线程：', self.thread_pool.activeThreadCount(), '线程计数：', self.thread_count)
-            if not self.thread_count:
-                print('重新下载：', self.remain)
-                self.download(*args[:-1])
-        else:
+        if not self.thread_count:
             self.stop_que()
-            if not self.thread_count:
-                globj.show_messagebox(*args)
+            globj.show_messagebox(*args)
 
     def download_finished(self, info, keys, page, root_path, rename, rewrite):
         self.thread_count -= 1
