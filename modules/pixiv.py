@@ -416,7 +416,3 @@ def cleaner():
 
 if __name__ == '__main__':
     pass
-    # session = requests.session()
-    # prox = {'http': 'socks5://127.0.0.1:1080', 'https': 'socks5://127.0.0.1:1080'}
-    # det = get_detail(session, '73588076', proxy=prox)
-    # download_thumb(session, prox, det)

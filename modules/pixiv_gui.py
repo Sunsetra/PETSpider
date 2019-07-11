@@ -615,7 +615,7 @@ class MainWidget(QWidget):
     def finish_download(self):
         """Do some clearing stuff when thread has finished."""
         self.thread_count -= 1
-        print('线程结束:', self.thread_count)
+        print('Thread finished:', self.thread_count)
         if not self.thread_count:
             if self.cancel_download_flag:
                 self.btn_dl.setDisabled(False)

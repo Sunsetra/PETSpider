@@ -335,10 +335,6 @@ class MainWidget(QWidget):
         self.thread_pool = QThreadPool.globalInstance()
         self.thread_count = 0
         self.cancel_download_flag = 0
-        # self.ATC_monitor = QTimer()  # Use QTimer to monitor ACT when exception catched
-        # self.ATC_monitor.setInterval(500)
-        # self.ATC_monitor.timeout.connect(self.except_checker)
-        # self.except_info = None  # Store message box function instance
 
         self.ledit_addr = globj.LineEditor()
         self.cbox_rename = QCheckBox('按序号重命名')
@@ -637,10 +633,10 @@ class MainWidget(QWidget):
 
     def retry_exception(self, *args):
         self.thread_count -= 1
-        print('线程出错：', args[-1])
-        print('活动线程：', self.thread_pool.activeThreadCount(), '线程计数：', self.thread_count)
+        print('Thread error：', args[-1])
+        print('Active thread：', self.thread_pool.activeThreadCount(), 'Thread count：', self.thread_count)
         if not self.thread_count and not self.cancel_download_flag:
-            print('重新下载：', self.remain)
+            print('Redownloading：', self.remain)
             self.download(*args[:-1])
 
     def download_exception(self, *args):
@@ -651,12 +647,12 @@ class MainWidget(QWidget):
 
     def download_finished(self, info, keys, page, root_path, rename, rewrite):
         self.thread_count -= 1
-        print('活动线程：', self.thread_pool.activeThreadCount(), '线程计数：', self.thread_count)
+        print('Active thread：', self.thread_pool.activeThreadCount(), 'Thread count：', self.thread_count)
         if not self.cancel_download_flag:
             self.remain.remove(page)
             if not self.thread_count:
                 if self.remain:
-                    print('重新下载：', self.remain)
+                    print('Redownloading：', self.remain)
                     self.download(info, keys, root_path, rename, rewrite)
                 else:
                     line = self.get_line('下载中')
