@@ -274,13 +274,11 @@ def download_pic(se, proxy: dict, item: dict, path: tuple, page: int):
     re_page = re.compile(r'_p0')
 
     real_url = re_page.sub('_p' + str(page), item['url']) if item['pageCount'] > 1 else item['url']
-    if not os.path.exists(path[0]):
-        print('mkdir:', path[0])
+    try:  # Prevent threads starting at same time
         os.makedirs(path[0])
-    # try:
-    #     os.makedirs(path[0])
-    # except FileExistsError:  # Prevent threads starting at same time
-    #     pass
+        print('mkdir:', path[0])
+    except FileExistsError:
+        pass
     file_name = ''.join((path[1], '_p', str(page), os.path.splitext(real_url)[1]))
     file_path = os.path.join(path[0], file_name)
     if not os.path.exists(file_path):  # If file exists, skip it

@@ -229,9 +229,11 @@ def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, rena
 
         folder_name = globj.name_verify(info['name'])
         folder_path = os.path.join(path, folder_name)
-        if not os.path.exists(folder_path):
-            print('mkdir:', folder_path)
+        try:  # Prevent threads starting at same time
             os.makedirs(folder_path)
+            print('mkdir:', folder_path)
+        except FileExistsError:
+            pass
         with se.get(origin,
                     headers={'User-Agent': random.choice(globj.GlobalVar.user_agent)},
                     proxies=proxy,
