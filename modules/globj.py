@@ -9,7 +9,7 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (QWidget, QLineEdit, QGroupBox, QPushButton, QCheckBox, QMessageBox, QTabWidget,
                              QDoubleSpinBox, QSpinBox, QFormLayout, QHBoxLayout, QVBoxLayout, QGridLayout, QMenu)
 
-from modules import pixiv_gui
+from modules import pixiv_gui, ehentai_gui
 
 _RE_SYMBOL = re.compile(r'[/\\|*?<>":]')
 _RE_PROXY = re.compile(r'.*:([1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{4}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')
@@ -60,6 +60,7 @@ class MiscSettingDialog(QWidget):
     def __init__(self):
         super().__init__()
         self.cbox_pixiv = QCheckBox('Pixiv')  # Proxy availability
+        self.cbox_ehentai = QCheckBox('Ehentai')  # Proxy availability
         self.cbox_twitter = QCheckBox('Twitter')  # Proxy availability
         self.ledit_http = LineEditor()  # Http proxy
         self.ledit_https = LineEditor()  # Https proxy
@@ -86,6 +87,7 @@ class MiscSettingDialog(QWidget):
     def init_ui(self):
         self.settings.beginGroup('MiscSetting')
         setting_pixiv_proxy = int(self.settings.value('pixiv_proxy', False))
+        setting_ehentai_proxy = int(self.settings.value('ehentai_proxy', False))
         setting_twitter_proxy = int(self.settings.value('twitter_proxy', False))
         setting_proxy = self.settings.value('proxy', {'http': '', 'https': ''})
         setting_similarity = float(self.settings.value('similarity', 60.0))
@@ -94,6 +96,7 @@ class MiscSettingDialog(QWidget):
         self.settings.endGroup()
 
         self.cbox_pixiv.setChecked(setting_pixiv_proxy)
+        self.cbox_ehentai.setChecked(setting_ehentai_proxy)
         self.cbox_twitter.setChecked(setting_twitter_proxy)
         self.ledit_http.setPlaceholderText('服务器地址:端口号')
         self.ledit_https.setPlaceholderText('服务器地址:端口号')
@@ -111,6 +114,7 @@ class MiscSettingDialog(QWidget):
         gbox_proxy = QGroupBox('代理设置')
         hlay_cbox = QHBoxLayout()  # Checkbox for different website
         hlay_cbox.addWidget(self.cbox_pixiv)
+        hlay_cbox.addWidget(self.cbox_ehentai)
         hlay_cbox.addWidget(self.cbox_twitter)
 
         flay_proxy = QFormLayout()  # Lineedit for server_ip:port
@@ -157,6 +161,7 @@ class MiscSettingDialog(QWidget):
         if (_RE_PROXY.match(http_proxy) or not http_proxy) and (_RE_PROXY.match(https_proxy) or not https_proxy):
             self.settings.beginGroup('MiscSetting')
             self.settings.setValue('pixiv_proxy', int(self.cbox_pixiv.isChecked()))
+            self.settings.setValue('ehentai_proxy', int(self.cbox_ehentai.isChecked()))
             self.settings.setValue('twitter_proxy', int(self.cbox_twitter.isChecked()))
             self.settings.setValue('proxy', {'http': http_proxy, 'https': https_proxy})
             self.settings.setValue('similarity', self.sbox_simi.value())
@@ -181,6 +186,7 @@ class MiscSettingDialog(QWidget):
         """Restore settings in the ini file, for the setting window will not be destroyed."""
         self.settings.beginGroup('MiscSetting')
         setting_pixiv_proxy = int(self.settings.value('pixiv_proxy', False))
+        setting_ehentai_proxy = int(self.settings.value('ehentai_proxy', False))
         setting_twitter_proxy = int(self.settings.value('twitter_proxy', False))
         setting_proxy = self.settings.value('proxy', {'http': '', 'https': ''})
         setting_similarity = float(self.settings.value('similarity', 60.0))
@@ -189,6 +195,7 @@ class MiscSettingDialog(QWidget):
         self.settings.endGroup()
 
         self.cbox_pixiv.setChecked(setting_pixiv_proxy)
+        self.cbox_ehentai.setChecked(setting_ehentai_proxy)
         self.cbox_twitter.setChecked(setting_twitter_proxy)
         self.ledit_http.setText(setting_proxy['http'])
         self.ledit_https.setText(setting_proxy['https'])
@@ -208,11 +215,13 @@ class SaveRuleDialog(QWidget):
         self.setWindowFlags(Qt.CustomizeWindowHint | Qt.WindowCloseButtonHint)
         self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
         self.pixiv_tab = pixiv_gui.SaveRuleSettingTab(self.settings)
+        self.ehentai_tab = ehentai_gui.SaveRuleSettingTab(self.settings)
         self.init_ui()
 
     def init_ui(self):
         main_wid = QTabWidget()
         main_wid.addTab(self.pixiv_tab, 'Pixiv')
+        main_wid.addTab(self.ehentai_tab, 'Ehentai')
         main_wid.setCurrentIndex(0)
         main_wid.setMinimumWidth(self.pixiv_tab.size().width())
 
@@ -238,6 +247,7 @@ class SaveRuleDialog(QWidget):
 
     def store(self):
         self.pixiv_tab.store()
+        self.ehentai_tab.store()
         self.close()
 
     def keyPressEvent(self, k):
@@ -246,6 +256,7 @@ class SaveRuleDialog(QWidget):
 
     def closeEvent(self, event):
         self.pixiv_tab.restore()
+        self.ehentai_tab.restore()
 
 
 class LineEditor(QLineEdit):

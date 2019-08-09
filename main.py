@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import QAction, QApplication, QMainWindow, QTabWidget, QMes
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
 
-from modules import globj, pixiv_gui, pixiv
+from modules import globj, pixiv_gui, pixiv, ehentai_gui
 
 
 class MainWindow(QMainWindow):
@@ -29,6 +29,11 @@ class MainWindow(QMainWindow):
         self.pixiv_login = None  # Pixiv login page
         self.pixiv_main = None  # Pixiv main page
         self.pixiv_icon = QIcon(os.path.join(bundle_dir, 'icon', 'pixiv.png'))
+
+        self.ehentai_var = None  # Ehentai global vars
+        self.ehentai_login = None  # Ehentai login page
+        self.ehentai_main = None  # Ehentai main page
+        self.ehentai_icon = QIcon(os.path.join(bundle_dir, 'icon', 'ehentai.png'))
 
         self.twitter_wid = None
         self.twitter_var = None
@@ -65,6 +70,7 @@ class MainWindow(QMainWindow):
         rule_setting.triggered.connect(self.rule_setting_dialog)
 
         self.tab_login('pixiv')
+        self.tab_login('ehentai')
         self.tab_widget.setCurrentIndex(0)
 
         self.frameGeometry().moveCenter(self.resolution.center())  # Open at middle of screen
@@ -97,6 +103,12 @@ class MainWindow(QMainWindow):
             self.tab_widget.removeTab(0)
             self.tab_widget.insertTab(0, self.pixiv_main, self.pixiv_icon, 'Pixiv')
             self.tab_widget.setCurrentIndex(0)
+        if tab == 'ehentai':
+            self.ehentai_main = ehentai_gui.MainWidget(self.ehentai_var, info)
+            self.ehentai_main.logout_sig.connect(self.tab_login)
+            self.tab_widget.removeTab(1)
+            self.tab_widget.insertTab(1, self.ehentai_main, self.ehentai_icon, 'Ehentai')
+            self.tab_widget.setCurrentIndex(1)
 
     def tab_login(self, tab: str):
         """Switch tab widget to login page."""
@@ -108,10 +120,18 @@ class MainWindow(QMainWindow):
             self.tab_widget.removeTab(0)
             self.tab_widget.insertTab(0, self.pixiv_login, self.pixiv_icon, 'Pixiv')
             self.tab_widget.setCurrentIndex(0)
+        if tab == 'ehentai':
+            self.ehentai_var = self.init_var()
+            self.ehentai_login = ehentai_gui.LoginWidget(self.ehentai_var)
+            self.ehentai_login.login_success.connect(self.tab_logout)
+            self.tab_widget.removeTab(1)
+            self.tab_widget.insertTab(1, self.ehentai_login, self.ehentai_icon, 'Ehentai')
+            self.tab_widget.setCurrentIndex(1)
 
     def clear_cookies(self):
         self.settings.beginGroup('Cookies')
         self.settings.setValue('pixiv', '')
+        self.settings.setValue('ehentai', '')
         self.settings.setValue('twitter', '')
         self.settings.sync()
         self.settings.endGroup()
@@ -138,6 +158,8 @@ class MainWindow(QMainWindow):
         setting_thumbnail = int(self.settings.value('thumbnail', True))
         if self.pixiv_main:  # Change thumbnail behavior
             self.pixiv_main.change_thumb_state(setting_thumbnail)
+        if self.ehentai_main:
+            self.ehentai_main.change_thumb_state(setting_thumbnail)
         self.settings.endGroup()
 
     def rule_setting_dialog(self):
@@ -149,6 +171,11 @@ class MainWindow(QMainWindow):
         """Do cleaning before closing."""
         if self.pixiv_main:
             if self.pixiv_main.logout_fn():
+                event.accept()
+            else:
+                event.ignore()
+        if self.ehentai_main:
+            if self.ehentai_main.logout_fn():
                 event.accept()
             else:
                 event.ignore()

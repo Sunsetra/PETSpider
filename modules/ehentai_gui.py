@@ -1,5 +1,5 @@
 # coding:utf-8
-"""GUI components for ehentai_RIP tab."""
+"""GUI components for ehentai tab."""
 import os
 import re
 from functools import partial
@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QFormLayout, QWidget, QGr
                              QCheckBox, QLabel, QSplitter, QFileDialog, QFrame, QMessageBox, QTableWidget, QHeaderView,
                              QAbstractItemView, QTableWidgetItem)
 
-from modules import globj, ehentai_RIP
+from modules import globj, ehentai
 
 
 class LoginWidget(QWidget):
@@ -44,7 +44,7 @@ class LoginWidget(QWidget):
 
     def init_ui(self):
         self.settings.beginGroup('Cookies')
-        if self.settings.value('ehentai_RIP', ''):
+        if self.settings.value('ehentai', ''):
             self.ledit_un.setPlaceholderText('(已保存)')
             self.ledit_pw.setPlaceholderText('(已保存)')
             self.cbox_cookie.setChecked(True)
@@ -78,7 +78,7 @@ class LoginWidget(QWidget):
         proxy = self.glovar.proxy
 
         self.settings.beginGroup('Cookies')
-        cookies = self.settings.value('ehentai_RIP', '')
+        cookies = self.settings.value('ehentai', '')
         self.settings.endGroup()
         if cookies and not password and not username:
             self.glovar.session.cookies.update(cookies)
@@ -97,12 +97,12 @@ class LoginWidget(QWidget):
     def set_cookies(self, info):
         self.settings.beginGroup('Cookies')
         if self.cbox_cookie.isChecked():
-            self.settings.setValue('ehentai_RIP', self.glovar.session.cookies)
+            self.settings.setValue('ehentai', self.glovar.session.cookies)
         else:
-            self.settings.setValue('ehentai_RIP', '')
+            self.settings.setValue('ehentai', '')
         self.settings.sync()
         self.settings.endGroup()
-        self.login_success.emit('ehentai_RIP', info)
+        self.login_success.emit('ehentai', info)
         self.set_disabled(False)
 
     def clear_cookies(self):
@@ -127,8 +127,8 @@ class LoginThread(QThread):
 
     def run(self):
         try:
-            ehentai_RIP.login(self.session, proxy=self.proxy, pw=self.pw, uid=self.uid)
-            info = ehentai_RIP.account_info(self.session, self.proxy)
+            ehentai.login(self.session, proxy=self.proxy, pw=self.pw, uid=self.uid)
+            info = ehentai.account_info(self.session, self.proxy)
         except requests.exceptions.RequestException as e:
             self.except_signal.emit(self.parent, QMessageBox.Warning, '连接失败', '请检查网络或使用代理。\n' + repr(e))
         except globj.ValidationError:
@@ -152,7 +152,7 @@ class VerifyThread(QThread):
 
     def run(self):
         try:
-            info = ehentai_RIP.account_info(self.session, self.proxy)
+            info = ehentai.account_info(self.session, self.proxy)
         except (requests.exceptions.ProxyError,
                 requests.exceptions.Timeout,
                 requests.exceptions.ConnectionError) as e:
@@ -180,7 +180,7 @@ class FetchInfoThread(QThread):
 
     def run(self):
         try:
-            info = ehentai_RIP.information(self.session, self.proxy, self.addr)
+            info = ehentai.information(self.session, self.proxy, self.addr)
         except (requests.exceptions.ProxyError,
                 requests.exceptions.Timeout,
                 requests.exceptions.ConnectionError) as e:
@@ -211,7 +211,7 @@ class AddQueueThread(QThread):
 
     def run(self):
         try:
-            info = ehentai_RIP.information(self.session, self.proxy, self.addr)
+            info = ehentai.information(self.session, self.proxy, self.addr)
         except (requests.exceptions.ProxyError,
                 requests.exceptions.Timeout,
                 requests.exceptions.ConnectionError) as e:
@@ -251,7 +251,7 @@ class DownloadPicThread(QRunnable):
 
     def run(self):  # Only do retrying when connection error occurs
         try:
-            ehentai_RIP.download(self.sess, self.proxy, self.info, self.keys, self.page, self.path, self.rn, self.rw)
+            ehentai.download(self.sess, self.proxy, self.info, self.keys, self.page, self.path, self.rn, self.rw)
         except (requests.exceptions.ProxyError,
                 requests.exceptions.Timeout,
                 requests.exceptions.ConnectionError,
@@ -280,7 +280,7 @@ class DownloadThumbThread(QThread):
         self.info = info
 
     def run(self):
-        path = ehentai_RIP.download_thumb(self.session, self.proxy, self.info)
+        path = ehentai.download_thumb(self.session, self.proxy, self.info)
         if path:
             self.info['thumb_path'] = path
             self.download_success.emit(self.info)
@@ -299,7 +299,7 @@ class FetchKeyThread(QThread):
 
     def run(self):
         try:
-            keys = ehentai_RIP.fetch_keys(self.session, self.proxy, self.info)
+            keys = ehentai.fetch_keys(self.session, self.proxy, self.info)
         except (requests.exceptions.ProxyError,
                 requests.exceptions.Timeout,
                 requests.exceptions.ConnectionError) as e:
@@ -359,7 +359,7 @@ class MainWidget(QWidget):
         self.thumbnail = QLabel()
         self.thumbnail.setFrameShape(QFrame.StyledPanel)
         self.thumbnail.setAlignment(Qt.AlignCenter)
-        self.thumb_default = QPixmap(os.path.join(self.glovar.home, 'icon', 'ehentai_RIP.png'))
+        self.thumb_default = QPixmap(os.path.join(self.glovar.home, 'icon', 'ehentai.png'))
         self.thumb_default = self.thumb_default.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.settings.beginGroup('MiscSetting')
         self.show_thumb_flag = int(self.settings.value('thumbnail', True))
@@ -615,7 +615,7 @@ class MainWidget(QWidget):
         self.que.item(line, 3).setText('下载中')
 
         self.settings.beginGroup('RuleSetting')
-        root_path = self.settings.value('ehentai_RIP_root_path', os.path.abspath('.'))
+        root_path = self.settings.value('ehentai_root_path', os.path.abspath('.'))
         self.settings.endGroup()
         self.settings.beginGroup('MiscSetting')
         dl_sametime = int(self.settings.value('dl_sametime', 3))
@@ -720,7 +720,7 @@ class MainWidget(QWidget):
                 self.refresh_thread.exit(-1)
                 self.fetch_thread.exit(-1)
                 self.thread_pool.waitForDone()
-                self.logout_sig.emit('ehentai_RIP')
+                self.logout_sig.emit('ehentai')
                 return True
             else:
                 self.btn_logout.setDisabled(False)
@@ -730,7 +730,7 @@ class MainWidget(QWidget):
             self.refresh_thread.exit(-1)
             self.fetch_thread.exit(-1)
             self.thread_pool.waitForDone()
-            self.logout_sig.emit('ehentai_RIP')
+            self.logout_sig.emit('ehentai')
             return True
 
 
@@ -753,16 +753,16 @@ class SaveRuleSettingTab(QWidget):
         hlay_root = QHBoxLayout()
         hlay_root.addWidget(QLabel('根目录'))
         hlay_root.addWidget(btn_root)
-        vlay_ehentai_RIP = QVBoxLayout()
-        vlay_ehentai_RIP.addLayout(hlay_root)
-        vlay_ehentai_RIP.addWidget(self.ledit_prev)
-        vlay_ehentai_RIP.setAlignment(Qt.AlignTop)
-        self.setLayout(vlay_ehentai_RIP)
+        vlay_ehentai = QVBoxLayout()
+        vlay_ehentai.addLayout(hlay_root)
+        vlay_ehentai.addWidget(self.ledit_prev)
+        vlay_ehentai.setAlignment(Qt.AlignTop)
+        self.setLayout(vlay_ehentai)
         self.setMinimumSize(self.sizeHint())
 
     def choose_dir(self):
         self.settings.beginGroup('RuleSetting')
-        setting_root_path = self.settings.value('ehentai_RIP_root_path', os.path.abspath('.'))
+        setting_root_path = self.settings.value('ehentai_root_path', os.path.abspath('.'))
         root_path = QFileDialog.getExistingDirectory(self, '选择目录', setting_root_path)
         self.settings.endGroup()
         if root_path:  # When click Cancel, root_path is None
@@ -778,13 +778,13 @@ class SaveRuleSettingTab(QWidget):
 
     def store(self):
         self.settings.beginGroup('RuleSetting')
-        self.settings.setValue('ehentai_RIP_root_path', self.root_path)
+        self.settings.setValue('ehentai_root_path', self.root_path)
         self.settings.sync()
         self.settings.endGroup()
 
     def restore(self):
         self.settings.beginGroup('RuleSetting')
-        self.root_path = self.settings.value('ehentai_RIP_root_path', os.path.abspath('.'))
+        self.root_path = self.settings.value('ehentai_root_path', os.path.abspath('.'))
         self.settings.endGroup()
         self.ledit_prev.setText(self.root_path)
         self.previewer()
