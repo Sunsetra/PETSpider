@@ -8,7 +8,7 @@ import requests
 from PyQt5.QtCore import Qt, QSettings, QThread, pyqtSignal, QVariant, QRunnable, QObject, QThreadPool, QTimer
 from PyQt5.QtGui import QBrush, QColor, QPixmap
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QHeaderView, QTableWidgetItem,
-                             QSplitter, QButtonGroup, QWidget, QGroupBox, QLineEdit, QPushButton, QCheckBox, QFrame,
+                             QSplitter, QButtonGroup, QWidget, QGroupBox, QTextEdit, QPushButton, QCheckBox, QFrame,
                              QMessageBox, QTableWidget, QLabel, QAbstractItemView, QSpinBox, QComboBox, QFileDialog)
 
 from modules import globj, pixiv
@@ -22,11 +22,12 @@ class LoginWidget(QWidget):
         self.glovar = glovar
         self.settings = QSettings(os.path.join(os.path.abspath('.'), 'settings.ini'), QSettings.IniFormat)
 
-        self.ledit_un = QLineEdit()
-        self.ledit_un.setContextMenuPolicy(Qt.NoContextMenu)
-        self.ledit_pw = QLineEdit()
-        self.ledit_pw.setContextMenuPolicy(Qt.NoContextMenu)
-        self.ledit_pw.setEchoMode(QLineEdit.Password)
+        # self.ledit_un = QLineEdit()
+        # self.ledit_un.setContextMenuPolicy(Qt.NoContextMenu)
+        # self.ledit_pw = QLineEdit()
+        # self.ledit_pw.setContextMenuPolicy(Qt.NoContextMenu)
+        # self.ledit_pw.setEchoMode(QLineEdit.Password)
+        self.tedit_cookies = QTextEdit()
         self.cbox_cookie = QCheckBox('保存登陆状态')
         self.btn_ok = QPushButton('登陆')
         self.btn_ok.setDefault(True)
@@ -37,22 +38,25 @@ class LoginWidget(QWidget):
         self.init_ui()
 
     def set_disabled(self, status: bool):
-        self.ledit_pw.setDisabled(status)
-        self.ledit_un.setDisabled(status)
+        # self.ledit_pw.setDisabled(status)
+        # self.ledit_un.setDisabled(status)
+        self.tedit_cookies.setDisabled(status)
         self.cbox_cookie.setDisabled(status)
         self.btn_ok.setDisabled(status)
 
     def init_ui(self):
         self.settings.beginGroup('Cookies')
         if self.settings.value('pixiv', ''):
-            self.ledit_un.setPlaceholderText('(已保存)')
-            self.ledit_pw.setPlaceholderText('(已保存)')
+            # self.ledit_un.setPlaceholderText('(已保存)')
+            # self.ledit_pw.setPlaceholderText('(已保存)')
+            self.tedit_cookies.setPlaceholderText('(已保存)')
             self.cbox_cookie.setChecked(True)
         self.settings.endGroup()
 
         flay_input = QFormLayout()  # Input area layout
-        flay_input.addRow('登陆名', self.ledit_un)
-        flay_input.addRow('密码', self.ledit_pw)
+        # flay_input.addRow('登陆名', self.ledit_un)
+        # flay_input.addRow('密码', self.ledit_pw)
+        flay_input.addRow('Cookies', self.tedit_cookies)
         flay_input.addRow(self.cbox_cookie)
 
         vlay_ok = QVBoxLayout()  # GroupBox layout
@@ -73,22 +77,24 @@ class LoginWidget(QWidget):
         or login by username and password.
         """
         self.set_disabled(True)
-        password = self.ledit_pw.text()
-        username = self.ledit_un.text()
+        # password = self.ledit_pw.text()
+        # username = self.ledit_un.text()
+        cookies = self.tedit_cookies.toPlainText()
         proxy = self.glovar.proxy
 
         self.settings.beginGroup('Cookies')
-        cookies = self.settings.value('pixiv', '')
+        saved_cookies = self.settings.value('pixiv', '')
         self.settings.endGroup()
-        if cookies and not password and not username:
-            self.glovar.session.cookies.update(cookies)
+        # if cookies and not password and not username:
+        if saved_cookies:
+            self.glovar.session.cookies.update(saved_cookies)
             self.verify_thread = VerifyThread(self, self.glovar.session, self.glovar.proxy)
             self.verify_thread.verify_success.connect(self.set_cookies)
             self.verify_thread.except_signal.connect(globj.show_messagebox)
             self.verify_thread.finished.connect(partial(self.set_disabled, False))
             self.verify_thread.start()
         else:
-            self.login_thread = LoginThread(self, self.glovar.session, proxy, password, username)
+            self.login_thread = LoginThread(self, self.glovar.session, proxy, cookies)
             self.login_thread.login_success.connect(self.set_cookies)
             self.login_thread.except_signal.connect(globj.show_messagebox)
             self.login_thread.finished.connect(partial(self.set_disabled, False))
@@ -106,10 +112,11 @@ class LoginWidget(QWidget):
         self.set_disabled(False)
 
     def clear_cookies(self):
-        self.ledit_un.clear()
-        self.ledit_un.setPlaceholderText('')
-        self.ledit_pw.clear()
-        self.ledit_pw.setPlaceholderText('')
+        # self.ledit_un.clear()
+        # self.ledit_un.setPlaceholderText('')
+        # self.ledit_pw.clear()
+        # self.ledit_pw.setPlaceholderText('')
+        self.tedit_cookies.setPlaceholderText('请从浏览器复制cookies到此处')
         self.cbox_cookie.setChecked(False)
 
 
@@ -117,17 +124,18 @@ class LoginThread(QThread):
     login_success = pyqtSignal(tuple)
     except_signal = pyqtSignal(object, int, str, str)
 
-    def __init__(self, parent, session, proxy, pw, uid):
+    def __init__(self, parent, session, proxy, cookies):
         super().__init__()
         self.parent = parent
         self.session = session
         self.proxy = proxy
-        self.pw = pw
-        self.uid = uid
+        self.cookies = cookies
+        # self.pw = pw
+        # self.uid = uid
 
     def run(self):
         try:
-            pixiv.login(self.session, proxy=self.proxy, pw=self.pw, uid=self.uid)
+            pixiv.login(self.session, self.cookies)
             info = pixiv.get_user(self.session, self.proxy)
         except requests.exceptions.RequestException as e:
             self.except_signal.emit(self.parent, QMessageBox.Warning, '连接失败', '请检查网络或使用代理。\n' + repr(e))

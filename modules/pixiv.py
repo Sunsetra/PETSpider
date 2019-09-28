@@ -21,37 +21,46 @@ _ROOT_URL = 'https://www.pixiv.net/'
 _SAUCENAO_URL = 'https://saucenao.com/search.php'
 
 
-def login(se, proxy: dict, uid: str, pw: str) -> bool:
-    """Get post_key and retrieve cookies."""
-    try:
-        with se.get(_LOGIN_URL + 'login',
-                    proxies=proxy,
-                    timeout=5) as pk_res:
-            pk_html = BeautifulSoup(pk_res.text, 'lxml')
-        pk_node = pk_html.find('input', attrs={'name': 'post_key'})
-        if not pk_node:
-            raise globj.ResponseError('Cannot fetch post key.')
-
-        login_form = {'password': pw,
-                      'pixiv_id': uid,
-                      'post_key': pk_node['value']}
-        with requests.post(_LOGIN_URL + 'api/login',
-                           proxies=proxy,
-                           data=login_form,
-                           cookies=se.cookies,
-                           timeout=5) as login_res:
-            login_json = json.loads(login_res.text)['body']
-            if 'validation_errors' in login_json:
-                raise globj.ValidationError(login_json['validation_errors'])
-            elif 'success' in login_json:
-                se.cookies.update(login_res.cookies)
-                return True
-            else:
-                return False
-    except requests.Timeout:
-        raise requests.Timeout('Timeout during login.')
-    except (globj.ResponseError, globj.ValidationError):
-        raise
+def login(se, c) -> bool:
+    """Resolve string-like cookies and set it to session."""
+    cookie = c.split(';')
+    cookie_jar = requests.cookies.RequestsCookieJar()
+    for item in cookie:
+        [name, value] = item.split('=')
+        cookie_jar.set(name, value, domain='pixiv.net')
+    se.cookies.update(cookie_jar)
+    return True
+    # try:
+    #     with se.get(_LOGIN_URL + 'login',
+    #                 proxies=proxy,
+    #                 timeout=5) as pk_res:
+    #         pk_html = BeautifulSoup(pk_res.text, 'lxml')
+    #     pk_node = pk_html.find('input', attrs={'name': 'post_key'})
+    #     if not pk_node:
+    #         raise globj.ResponseError('Cannot fetch post key.')
+    #
+    #     login_form = {'password': pw,
+    #                   'pixiv_id': uid,
+    #                   'post_key': pk_node['value'],
+    #                   'User-Agent': random.choice(globj.GlobalVar.user_agent)}
+    #     with requests.post(_LOGIN_URL + 'api/login',
+    #                        proxies=proxy,
+    #                        data=login_form,
+    #                        cookies=se.cookies,
+    #                        timeout=5) as login_res:
+    #         login_json = json.loads(login_res.text)['body']
+    #         print(login_json)
+    #         if 'validation_errors' in login_json:
+    #             raise globj.ValidationError(login_json['validation_errors'])
+    #         elif 'success' in login_json:
+    #             se.cookies.update(login_res.cookies)
+    #             return True
+    #         else:
+    #             return False
+    # except requests.Timeout:
+    #     raise requests.Timeout('Timeout during login.')
+    # except (globj.ResponseError, globj.ValidationError):
+    #     raise
 
 
 def get_user(se, proxy: dict) -> tuple:
