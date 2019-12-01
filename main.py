@@ -159,7 +159,7 @@ class MainWindow(QMainWindow):
         if int(self.settings.value('ehentai_proxy', False)):
             self.ehentai_var.proxy = self.settings.value('proxy', {})
         else:
-            self.pixiv_var.proxy = {}
+            self.ehentai_var.proxy = {}
 
         setting_thumbnail = int(self.settings.value('thumbnail', True))
         if self.pixiv_main:  # Change thumbnail behavior

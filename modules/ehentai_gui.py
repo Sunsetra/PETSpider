@@ -9,7 +9,7 @@ from PyQt5.QtCore import Qt, QSettings, QThread, pyqtSignal, QThreadPool, QObjec
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QFormLayout, QWidget, QGroupBox, QLineEdit, QPushButton,
                              QCheckBox, QLabel, QSplitter, QFileDialog, QFrame, QMessageBox, QTableWidget, QHeaderView,
-                             QAbstractItemView, QTableWidgetItem)
+                             QAbstractItemView, QTableWidgetItem, QSpinBox)
 
 from modules import globj, ehentai
 
@@ -221,6 +221,7 @@ class DownloadPicThread(QRunnable):
     def run(self):  # Only do retrying when connection error occurs
         try:
             ehentai.download(self.sess, self.proxy, self.info, self.keys, self.page, self.path, self.rn, self.rw)
+            print('提交下载第{0}页'.format(self.page))
         except (requests.exceptions.ProxyError,
                 requests.exceptions.Timeout,
                 requests.exceptions.ConnectionError,
@@ -310,6 +311,18 @@ class MainWidget(QWidget):
         self.cbox_rename.setToolTip('勾选后将以图片在画廊中的序号重命名而非使用原图片名。')
         self.cbox_rewrite = QCheckBox('覆盖模式')
         self.cbox_rewrite.setToolTip('勾选后将不会跳过同名文件而是覆盖它。')
+
+        self.sbox_begin_page = QSpinBox()
+        self.sbox_begin_page.setRange(1, 99999)
+        self.sbox_begin_page.setContextMenuPolicy(Qt.NoContextMenu)
+        self.sbox_begin_page.setToolTip('将从画廊的该页数开始下载')
+        self.sbox_begin_page.valueChanged.connect(self.set_end_page_range)
+        self.sbox_end_page = QSpinBox()
+        self.sbox_end_page.setRange(1, 99999)
+        self.sbox_end_page.setValue(99999)
+        self.sbox_end_page.setContextMenuPolicy(Qt.NoContextMenu)
+        self.sbox_end_page.setToolTip('将下载至画廊的该页数')
+
         self.btn_get = QPushButton('获取信息')
         self.btn_get.clicked.connect(self.fetch_info)
         self.btn_add = QPushButton('加入队列')
@@ -369,6 +382,12 @@ class MainWidget(QWidget):
         hlay_cbox = QHBoxLayout()
         hlay_cbox.addWidget(self.cbox_rename)
         hlay_cbox.addWidget(self.cbox_rewrite)
+        hlay_cbox.addStretch(1)
+        hlay_cbox.addWidget(QLabel('从'))
+        hlay_cbox.addWidget(self.sbox_begin_page)
+        hlay_cbox.addWidget(QLabel('下载至'))
+        hlay_cbox.addWidget(self.sbox_end_page)
+        hlay_cbox.addWidget(QLabel('页'))
         hlay_cbox.setAlignment(Qt.AlignLeft)
         hlay_acts = QHBoxLayout()
         hlay_acts.addStretch(1)
@@ -590,13 +609,15 @@ class MainWidget(QWidget):
         dl_sametime = int(self.settings.value('dl_sametime', 3))
         self.settings.endGroup()
         self.thread_pool.setMaxThreadCount(dl_sametime)
+
         rename = self.cbox_rename.checkState()
         rewrite = self.cbox_rewrite.checkState()
-        self.remain = set(range(1, int(info['page']) + 1))
+        start_page = self.sbox_begin_page.value()
+        end_page = self.sbox_end_page.value() if self.sbox_end_page.value() <= int(info['page']) else int(info['page'])
+        self.remain = set(range(start_page, end_page + 1))
         self.download(info, keys, root_path, rename, rewrite)
 
     def download(self, info, keys, root_path, rename, rewrite):
-        print(rewrite)
         for num in self.remain:
             thread = DownloadPicThread(self, self.glovar.session, self.glovar.proxy, info, keys, num,
                                        root_path, rename=rename, rewrite=rewrite)
@@ -701,6 +722,9 @@ class MainWidget(QWidget):
             self.thread_pool.waitForDone()
             self.logout_sig.emit('ehentai')
             return True
+
+    def set_end_page_range(self, minimun):
+        self.sbox_end_page.setRange(minimun, 99999)
 
 
 class SaveRuleSettingTab(QWidget):

@@ -249,7 +249,7 @@ def download(se, proxy: dict, info: dict, keys: dict, page: int, path: str, rena
             if not os.path.exists(real_path) or rewrite:  # If file exists or not rewrite, skip it
                 if os.path.exists(real_path):
                     os.remove(real_path)
-                print('Downloading:', real_path)
+                print('Downloading page {0} to {1}'.format(page, real_path))
                 with open(real_path, 'ab') as data:
                     for chunk in pic_res.iter_content():
                         data.write(chunk)
