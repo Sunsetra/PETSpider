@@ -650,7 +650,7 @@ class MainWidget(QWidget):
         self.btn_snao.setText('以图搜图')
         self.btn_snao.setDisabled(False)
 
-    def logout_fn(self) -> bool:
+    def logout_fn(self):
         self.btn_logout.setDisabled(True)
         if self.thread_count:
             msg_box = QMessageBox(self)
@@ -707,8 +707,8 @@ class SaveRuleSettingTab(QWidget):
 
         self.hlay_folder_cbox = QHBoxLayout()
         self.hlay_file_cbox = QHBoxLayout()
-        self.cbox_folder_list = [LayerSelector() for i in range(5)]
-        self.cbox_file_list = [LayerSelector() for i in range(5)]
+        self.cbox_folder_list = [LayerSelector() for _ in range(5)]
+        self.cbox_file_list = [LayerSelector() for _ in range(5)]
         for wid in self.cbox_folder_list:
             wid.currentIndexChanged.connect(self.folder_rule_updater)
             self.hlay_folder_cbox.addWidget(wid)

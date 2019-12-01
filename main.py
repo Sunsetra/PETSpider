@@ -2,6 +2,7 @@
 """A crawler for Pixiv, E-hentai and twitter."""
 import os
 import sys
+from functools import partial
 from multiprocessing import freeze_support
 
 import requests
@@ -66,8 +67,8 @@ class MainWindow(QMainWindow):
         rule_setting = QAction('保存规则(&R)', self)
         setting_menu.addAction(misc_setting)
         setting_menu.addAction(rule_setting)
-        misc_setting.triggered.connect(self.misc_setting_dialog)
-        rule_setting.triggered.connect(self.rule_setting_dialog)
+        misc_setting.triggered.connect(partial(self.setting_dialog, self.misc_setting))
+        rule_setting.triggered.connect(partial(self.setting_dialog, self.rule_setting))
 
         self.tab_login('pixiv')
         self.tab_login('ehentai')
@@ -142,10 +143,10 @@ class MainWindow(QMainWindow):
         pixiv.cleaner()
         globj.show_messagebox(self, QMessageBox.Information, '清除完成', '成功清除数据库缓存！')
 
-    def misc_setting_dialog(self):
-        self.misc_setting.move(self.x() + (self.width() - self.misc_setting.sizeHint().width()) / 2,
-                               self.y() + (self.height() - self.misc_setting.sizeHint().height()) / 2)
-        self.misc_setting.show()
+    def setting_dialog(self, setting):
+        setting.move(self.x() + (self.width() - self.misc_setting.sizeHint().width()) / 2,
+                     self.y() + (self.height() - self.misc_setting.sizeHint().height()) / 2)
+        setting.show()
 
     def misc_setting_checker(self):
         """Make the proxy and thumbnail setting active immediately."""
@@ -155,17 +156,17 @@ class MainWindow(QMainWindow):
         else:
             self.pixiv_var.proxy = {}
 
+        if int(self.settings.value('ehentai_proxy', False)):
+            self.ehentai_var.proxy = self.settings.value('proxy', {})
+        else:
+            self.pixiv_var.proxy = {}
+
         setting_thumbnail = int(self.settings.value('thumbnail', True))
         if self.pixiv_main:  # Change thumbnail behavior
             self.pixiv_main.change_thumb_state(setting_thumbnail)
         if self.ehentai_main:
             self.ehentai_main.change_thumb_state(setting_thumbnail)
         self.settings.endGroup()
-
-    def rule_setting_dialog(self):
-        self.rule_setting.move(self.x() + (self.width() - self.rule_setting.sizeHint().width()) / 2,
-                               self.y() + (self.height() - self.rule_setting.sizeHint().height()) / 2)
-        self.rule_setting.show()
 
     def closeEvent(self, event):
         """Do cleaning before closing."""

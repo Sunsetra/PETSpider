@@ -167,38 +167,7 @@ class VerifyThread(QThread):
             self.verify_success.emit(info)
 
 
-class FetchInfoThread(QThread):
-    fetch_success = pyqtSignal(dict)
-    except_signal = pyqtSignal(object, int, str, str)
-
-    def __init__(self, parent, session, proxy: dict, addr: str):
-        super().__init__()
-        self.parent = parent
-        self.session = session
-        self.proxy = proxy
-        self.addr = addr
-
-    def run(self):
-        try:
-            info = ehentai.information(self.session, self.proxy, self.addr)
-        except (requests.exceptions.ProxyError,
-                requests.exceptions.Timeout,
-                requests.exceptions.ConnectionError) as e:
-            self.except_signal.emit(self.parent, QMessageBox.Warning, '连接失败', '请检查网络或使用代理。\n' + repr(e))
-        except globj.IPBannedError as e:
-            self.except_signal.emit(self.parent, QMessageBox.Critical, 'IP被封禁',
-                                    '当前IP已被封禁，将在{0}小时{1}分{2}秒后解封。'.format(e.args[0], e.args[1], e.args[2]))
-        except globj.WrongAddressError:
-            self.except_signal.emit(self.parent, QMessageBox.Critical, '地址错误',
-                                    '请输入正确的画廊地址。')
-        except globj.ResponseError as e:
-            self.except_signal.emit(self.parent, QMessageBox.Critical,
-                                    '未知错误', '返回值错误，请向开发者反馈\n{0}'.format(repr(e)))
-        else:
-            self.fetch_success.emit(info)
-
-
-class AddQueueThread(QThread):
+class FetchDataThread(QThread):
     fetch_success = pyqtSignal(dict)
     except_signal = pyqtSignal(object, int, str, str)
 
@@ -460,7 +429,7 @@ class MainWidget(QWidget):
         if origin:
             addr = origin + '/' if origin[-1] != '/' else origin
             if re.match(r'(https?://)?e[x-]hentai.org/g/\d{1,7}/\w{10}/', addr):  # Check legality
-                self.fetch_thread = FetchInfoThread(self, self.glovar.session, self.glovar.proxy, addr)
+                self.fetch_thread = FetchDataThread(self, self.glovar.session, self.glovar.proxy, addr)
                 self.fetch_thread.fetch_success.connect(self.fetch_info_succeed)
                 self.fetch_thread.except_signal.connect(globj.show_messagebox)
                 self.fetch_thread.finished.connect(self.fetch_info_finished)
@@ -526,7 +495,7 @@ class MainWidget(QWidget):
                     self.btn_add.setDisabled(True)
                     self.btn_get.setDisabled(True)
                     if re.match(r'(https?://)?e[x-]hentai.org/g/\d{1,7}/\w{10}/', addr):  # Check legality
-                        self.fetch_thread = FetchInfoThread(self, self.glovar.session, self.glovar.proxy, addr)
+                        self.fetch_thread = FetchDataThread(self, self.glovar.session, self.glovar.proxy, addr)
                         self.fetch_thread.fetch_success.connect(self.add_que)
                         self.fetch_thread.except_signal.connect(globj.show_messagebox)
                         self.fetch_thread.finished.connect(self.fetch_info_finished)

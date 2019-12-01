@@ -85,26 +85,9 @@ class MiscSettingDialog(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        self.settings.beginGroup('MiscSetting')
-        setting_pixiv_proxy = int(self.settings.value('pixiv_proxy', False))
-        setting_ehentai_proxy = int(self.settings.value('ehentai_proxy', False))
-        setting_twitter_proxy = int(self.settings.value('twitter_proxy', False))
-        setting_proxy = self.settings.value('proxy', {'http': '', 'https': ''})
-        setting_similarity = float(self.settings.value('similarity', 60.0))
-        setting_dlcount = int(self.settings.value('dl_sametime', 3))
-        setting_thumbnail = int(self.settings.value('thumbnail', True))
-        self.settings.endGroup()
-
-        self.cbox_pixiv.setChecked(setting_pixiv_proxy)
-        self.cbox_ehentai.setChecked(setting_ehentai_proxy)
-        self.cbox_twitter.setChecked(setting_twitter_proxy)
+        self.restore()
         self.ledit_http.setPlaceholderText('服务器地址:端口号')
         self.ledit_https.setPlaceholderText('服务器地址:端口号')
-        self.ledit_http.setText(setting_proxy['http'])
-        self.ledit_https.setText(setting_proxy['https'])
-        self.sbox_simi.setValue(setting_similarity)
-        self.sbox_dlcount.setValue(setting_dlcount)
-        self.cbox_thumb.setChecked(setting_thumbnail)
 
         btn_ok = QPushButton('确定', self)
         btn_ok.clicked.connect(self.store)
@@ -178,12 +161,7 @@ class MiscSettingDialog(QWidget):
             msg_box.addButton('确定', QMessageBox.AcceptRole)
             msg_box.exec()
 
-    def keyPressEvent(self, k):
-        if k.key() == Qt.Key_Escape:
-            self.close()
-
-    def closeEvent(self, event):
-        """Restore settings in the ini file, for the setting window will not be destroyed."""
+    def restore(self):
         self.settings.beginGroup('MiscSetting')
         setting_pixiv_proxy = int(self.settings.value('pixiv_proxy', False))
         setting_ehentai_proxy = int(self.settings.value('ehentai_proxy', False))
@@ -202,6 +180,14 @@ class MiscSettingDialog(QWidget):
         self.sbox_simi.setValue(setting_similarity)
         self.sbox_dlcount.setValue(setting_dlcount)
         self.cbox_thumb.setChecked(setting_thumbnail)
+
+    def keyPressEvent(self, k):
+        if k.key() == Qt.Key_Escape:
+            self.close()
+
+    def closeEvent(self, event):
+        """Restore settings in the ini file, for the setting window will not be destroyed."""
+        self.restore()
         self.closed.emit()
 
 
