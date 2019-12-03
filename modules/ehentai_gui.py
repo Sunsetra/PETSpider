@@ -221,7 +221,6 @@ class DownloadPicThread(QRunnable):
     def run(self):  # Only do retrying when connection error occurs
         try:
             ehentai.download(self.sess, self.proxy, self.info, self.keys, self.page, self.path, self.rn, self.rw)
-            print('提交下载第{0}页'.format(self.page))
         except (requests.exceptions.ProxyError,
                 requests.exceptions.Timeout,
                 requests.exceptions.ConnectionError,
@@ -313,14 +312,19 @@ class MainWidget(QWidget):
         self.cbox_rewrite.setToolTip('勾选后将不会跳过同名文件而是覆盖它。')
 
         self.sbox_begin_page = QSpinBox()
-        self.sbox_begin_page.setRange(1, 99999)
+        font_info = self.sbox_begin_page.fontMetrics()
+        font_width = font_info.horizontalAdvance('9') * 8
+        font_height = font_info.height()
+        self.sbox_begin_page.setRange(1, 9999)
         self.sbox_begin_page.setContextMenuPolicy(Qt.NoContextMenu)
+        self.sbox_begin_page.setMinimumSize(font_width, font_height)
         self.sbox_begin_page.setToolTip('将从画廊的该页数开始下载')
         self.sbox_begin_page.valueChanged.connect(self.set_end_page_range)
         self.sbox_end_page = QSpinBox()
-        self.sbox_end_page.setRange(1, 99999)
-        self.sbox_end_page.setValue(99999)
+        self.sbox_end_page.setRange(1, 9999)
+        self.sbox_end_page.setValue(9999)
         self.sbox_end_page.setContextMenuPolicy(Qt.NoContextMenu)
+        self.sbox_end_page.setMinimumSize(font_width, font_height)
         self.sbox_end_page.setToolTip('将下载至画廊的该页数')
 
         self.btn_get = QPushButton('获取信息')
@@ -724,7 +728,7 @@ class MainWidget(QWidget):
             return True
 
     def set_end_page_range(self, minimun):
-        self.sbox_end_page.setRange(minimun, 99999)
+        self.sbox_end_page.setRange(minimun, 9999)
 
 
 class SaveRuleSettingTab(QWidget):
