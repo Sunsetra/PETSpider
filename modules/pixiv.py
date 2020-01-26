@@ -68,13 +68,17 @@ def get_user(se, proxy: dict) -> tuple:
     try:
         with se.get(_ROOT_URL,
                     proxies=proxy,
-                    timeout=5) as user_res:
+                    timeout=5,
+                    headers={
+                        'Referer': 'https://www.pixiv.net/',
+                        'User-Agent': random.choice(globj.GlobalVar.user_agent)}
+                    ) as user_res:
             user_html = BeautifulSoup(user_res.text, 'lxml')
         user_node = user_html.find('div', class_='user-name-container')
         if not user_node:
             raise globj.ResponseError('Cannot fetch user info.')
 
-        user_id = user_node.a['href'].split('=')[1]
+        user_id = user_node.a['href'].split('/')[-1]
         user_name = user_node.string
         return user_id, user_name
     except requests.Timeout:
