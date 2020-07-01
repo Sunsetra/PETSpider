@@ -23,7 +23,7 @@ _SAUCENAO_URL = 'https://saucenao.com/search.php'
 
 def login(se, c) -> bool:
     """Resolve string-like cookies and set it to session."""
-    cookie = c.split(';')
+    cookie = c.split('; ')
     cookie_jar = requests.cookies.RequestsCookieJar()
     for item in cookie:
         [name, value] = item.split('=')
@@ -73,13 +73,14 @@ def get_user(se, proxy: dict) -> tuple:
                         'Referer': 'https://www.pixiv.net/',
                         'User-Agent': random.choice(globj.GlobalVar.user_agent)}
                     ) as user_res:
-            user_html = BeautifulSoup(user_res.text, 'lxml')
-        user_node = user_html.find('div', class_='user-name-container')
-        if not user_node:
+            user_info = re.findall(r'"userData":{"id":"(\d{1,10})","pixivId":"(.*)","name":"(.*)","profileImg":',
+                                   user_res.text)
+
+        if not user_info:
             raise globj.ResponseError('Cannot fetch user info.')
 
-        user_id = user_node.a['href'].split('/')[-1]
-        user_name = user_node.string
+        user_id = user_info[0][0]
+        user_name = user_info[0][2]
         return user_id, user_name
     except requests.Timeout:
         raise requests.Timeout('Timeout during getting user info.')

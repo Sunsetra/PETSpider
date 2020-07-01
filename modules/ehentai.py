@@ -110,7 +110,7 @@ def information(se, proxy: dict, addr: str) -> dict:
         _ban_checker(gallery_html)
         if 'Gallery not found.' in gallery_html.body.get_text() or 'Key missing' in gallery_html.body.get_text():
             raise globj.WrongAddressError('Wrong address provided.')
-        name = gallery_html.find('h1', id='gj').string  # Japanese name is prior
+        name: str = gallery_html.find('h1', id='gj').string  # Japanese name is prior
         if not name:
             name = gallery_html.find('h1', id='gn').string
         misc = gallery_html.find_all('td', class_='gdt2')
